@@ -27,6 +27,16 @@ public static class Helpers
         }
     };
 
+    private static CCSPlayerController? _worldTextFacingPlayer;
+    public static void SetWorldTextFacingPlayer(CCSPlayerController? player)
+    {
+        _worldTextFacingPlayer = player;
+    }
+    public static void ClearWorldTextFacingPlayer()
+    {
+        _worldTextFacingPlayer = null;
+    }
+
     public static bool IsValidPlayer([NotNullWhen(true)] CCSPlayerController? player)
     {
         return player != null && player.IsValid;
@@ -376,7 +386,7 @@ public static class Helpers
             text.MessageText = $"{spawn.Id}";
             text.Enabled = true;
             text.Color = Color.White;
-            text.FontSize = 36;
+            text.FontSize = 48;
             text.Fullbright = true;
             text.WorldUnitsPerPx = 0.1f;
             text.DepthOffset = 0.0f;
@@ -384,7 +394,20 @@ public static class Helpers
             text.JustifyVertical = PointWorldTextJustifyVertical_t.POINT_WORLD_TEXT_JUSTIFY_VERTICAL_CENTER;
 
             var pos = new Vector(spawn.Vector.X, spawn.Vector.Y, spawn.Vector.Z + 50.0f);
-            var ang = new QAngle(0, 0, 90);
+            float yaw = 0f;
+            try
+            {
+                if (_worldTextFacingPlayer != null && _worldTextFacingPlayer.PlayerPawn.Value != null)
+                {
+                    var eye = _worldTextFacingPlayer.PlayerPawn.Value.EyeAngles;
+                    if (eye != null)
+                    {
+                        yaw = eye.Y - 90f;
+                    }
+                }
+            }
+            catch { }
+            var ang = new QAngle(0, yaw, 90);
             text.Teleport(pos, ang, new Vector(0, 0, 0));
 
             Debug($"WorldText: created for spawn {spawn.Id} at {spawn.Vector.X},{spawn.Vector.Y},{spawn.Vector.Z}");
@@ -400,7 +423,7 @@ public static class Helpers
                     shadow.MessageText = $"{spawn.Id}";
                     shadow.Enabled = true;
                     shadow.Color = Color.Black;
-                    shadow.FontSize = 36;
+                    shadow.FontSize = 48;
                     shadow.Fullbright = true;
                     shadow.WorldUnitsPerPx = 0.1f;
                     shadow.DepthOffset = 0.0f;
@@ -436,6 +459,37 @@ public static class Helpers
             catch { }
         }
         _spawnTextEntities.Clear();
+    }
+
+    public static void UpdateSpawnTextFacing(CCSPlayerController? player)
+    {
+        float yaw = 0f;
+        try
+        {
+            if (player != null && player.PlayerPawn.Value != null)
+            {
+                var eye = player.PlayerPawn.Value.EyeAngles;
+                if (eye != null)
+                {
+                    yaw = eye.Y - 90f;
+                }
+            }
+        }
+        catch { }
+
+        var ang = new QAngle(0, yaw, 90);
+        foreach (var ent in _spawnTextEntities.ToArray())
+        {
+            try
+            {
+                if (ent is CPointWorldText text && text.AbsOrigin != null)
+                {
+                    var pos = new Vector(text.AbsOrigin.X, text.AbsOrigin.Y, text.AbsOrigin.Z);
+                    text.Teleport(pos, ang, new Vector(0, 0, 0));
+                }
+            }
+            catch { }
+        }
     }
 
     public static bool HasQueuePriority(CCSPlayerController player, string[] queuePriorityFlags)

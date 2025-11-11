@@ -253,10 +253,26 @@ public class RetakesPlugin : BasePlugin
             }
         }
 
+        Helpers.SetWorldTextFacingPlayer(player);
+
         // This will fire the OnRoundStart event listener
         Server.ExecuteCommand("mp_warmup_start");
         Server.ExecuteCommand("mp_warmuptime 120");
         Server.ExecuteCommand("mp_warmup_pausetimer 1");
+        StartSpawnTextFacingLoop(player);
+    }
+
+    private void StartSpawnTextFacingLoop(CCSPlayerController? player)
+    {
+        AddTimer(0.2f, () =>
+        {
+            if (_showingSpawnsForBombsite == null)
+            {
+                return;
+            }
+            Helpers.UpdateSpawnTextFacing(player);
+            StartSpawnTextFacingLoop(player);
+        });
     }
 
     [ConsoleCommand("css_add", "Creates a new retakes spawn for the bombsite currently shown.")]
@@ -546,6 +562,7 @@ public class RetakesPlugin : BasePlugin
         _showingSpawnsForBombsite = null;
         _showingGroup = null;
         Helpers.RemoveSpawnTextLabels();
+        Helpers.ClearWorldTextFacingPlayer();
         Server.ExecuteCommand("mp_warmup_end");
     }
 
@@ -904,6 +921,7 @@ public class RetakesPlugin : BasePlugin
 
         // If we are not in warmup, ensure any world-text labels are cleaned up
         Helpers.RemoveSpawnTextLabels();
+        Helpers.ClearWorldTextFacingPlayer();
 
         if (_gameManager == null)
         {
