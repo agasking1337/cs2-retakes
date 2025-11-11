@@ -373,23 +373,47 @@ public static class Helpers
 
             text.DispatchSpawn();
 
-            text.MessageText = $"#{spawn.Id}";
+            text.MessageText = $"{spawn.Id}";
             text.Enabled = true;
-            text.Color = Color.FromArgb(255, baseColor);
-            text.FontSize = 40;
+            text.Color = Color.White;
+            text.FontSize = 36;
             text.Fullbright = true;
             text.WorldUnitsPerPx = 0.1f;
             text.DepthOffset = 0.0f;
             text.JustifyHorizontal = PointWorldTextJustifyHorizontal_t.POINT_WORLD_TEXT_JUSTIFY_HORIZONTAL_CENTER;
             text.JustifyVertical = PointWorldTextJustifyVertical_t.POINT_WORLD_TEXT_JUSTIFY_VERTICAL_CENTER;
 
-            var pos = new Vector(spawn.Vector.X, spawn.Vector.Y, spawn.Vector.Z + 110.0f);
+            var pos = new Vector(spawn.Vector.X, spawn.Vector.Y, spawn.Vector.Z + 50.0f);
             var ang = new QAngle(0, 0, 90);
             text.Teleport(pos, ang, new Vector(0, 0, 0));
 
             Debug($"WorldText: created for spawn {spawn.Id} at {spawn.Vector.X},{spawn.Vector.Y},{spawn.Vector.Z}");
 
             _spawnTextEntities.Add(text);
+
+            try
+            {
+                var shadow = Utilities.CreateEntityByName<CPointWorldText>("point_worldtext");
+                if (shadow != null)
+                {
+                    shadow.DispatchSpawn();
+                    shadow.MessageText = $"{spawn.Id}";
+                    shadow.Enabled = true;
+                    shadow.Color = Color.Black;
+                    shadow.FontSize = 36;
+                    shadow.Fullbright = true;
+                    shadow.WorldUnitsPerPx = 0.1f;
+                    shadow.DepthOffset = 0.0f;
+                    shadow.JustifyHorizontal = PointWorldTextJustifyHorizontal_t.POINT_WORLD_TEXT_JUSTIFY_HORIZONTAL_CENTER;
+                    shadow.JustifyVertical = PointWorldTextJustifyVertical_t.POINT_WORLD_TEXT_JUSTIFY_VERTICAL_CENTER;
+
+                    var shadowPos = new Vector(pos.X + 0.5f, pos.Y + 0.5f, pos.Z - 0.5f);
+                    shadow.Teleport(shadowPos, ang, new Vector(0, 0, 0));
+
+                    _spawnTextEntities.Add(shadow);
+                }
+            }
+            catch { }
         }
         catch
         {
