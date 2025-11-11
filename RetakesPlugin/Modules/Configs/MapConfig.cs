@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 
 namespace RetakesPlugin.Modules.Configs;
 
@@ -36,6 +36,32 @@ public class MapConfig
             // {
             //     throw new Exception("No spawns found in config");
             // }
+
+            // Ensure all spawns have a unique incremental Id
+            if (_mapConfigData != null)
+            {
+                var changed = false;
+                var maxId = _mapConfigData.Spawns.Count == 0 ? 0 : _mapConfigData.Spawns.Max(s => s.Id);
+                var seen = new HashSet<int>();
+                foreach (var s in _mapConfigData.Spawns)
+                {
+                    if (s.Id > 0 && !seen.Contains(s.Id))
+                    {
+                        seen.Add(s.Id);
+                        continue;
+                    }
+
+                    maxId += 1;
+                    s.Id = maxId;
+                    seen.Add(s.Id);
+                    changed = true;
+                }
+
+                if (changed)
+                {
+                    Save();
+                }
+            }
 
             Helpers.Debug($"Data loaded from {_mapConfigPath}");
         }
@@ -79,6 +105,13 @@ public class MapConfig
             return false; // Spawn already exists, avoid duplication
         }
 
+        // Assign an Id if missing
+        if (spawn.Id <= 0)
+        {
+            var maxId = _mapConfigData.Spawns.Count == 0 ? 0 : _mapConfigData.Spawns.Max(s => s.Id);
+            spawn.Id = maxId + 1;
+        }
+
         _mapConfigData.Spawns.Add(spawn);
 
         Save();
@@ -119,6 +152,27 @@ public class MapConfig
             .ToList();
 
         return _mapConfigData;
+    }
+
+    public bool SetSpawnGroup(int id, string? group)
+    {
+        if (_mapConfigData == null)
+        {
+            throw new Exception("Map config data is null");
+        }
+
+        var spawn = _mapConfigData.Spawns.FirstOrDefault(s => s.Id == id);
+        if (spawn == null)
+        {
+            return false;
+        }
+
+        spawn.Group = string.IsNullOrWhiteSpace(group) ? null : group.Trim();
+
+        Save();
+        Load();
+
+        return true;
     }
 
     private void Save()

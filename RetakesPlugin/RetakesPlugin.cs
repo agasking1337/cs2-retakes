@@ -1,4 +1,6 @@
 using CounterStrikeSharp.API;
+using System;
+using System.Linq;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Core.Attributes;
 using CounterStrikeSharp.API.Core.Attributes.Registration;
@@ -56,6 +58,7 @@ public class RetakesPlugin : BasePlugin
     private CCSPlayerController? _planter;
     private CsTeam _lastRoundWinner = CsTeam.None;
     private Bombsite? _showingSpawnsForBombsite;
+    private string? _showingGroup;
     private Bombsite? _forcedBombsite;
 
     // TODO: We should really store this in SQLite, but for now we'll just store it in memory.
@@ -67,6 +70,7 @@ public class RetakesPlugin : BasePlugin
         _planter = null;
         _lastRoundWinner = CsTeam.None;
         _showingSpawnsForBombsite = null;
+        _showingGroup = null;
     }
     #endregion
 
@@ -237,6 +241,17 @@ public class RetakesPlugin : BasePlugin
         }
 
         _showingSpawnsForBombsite = bombsite == "A" ? Bombsite.A : Bombsite.B;
+
+        // Optional group filter as second argument
+        _showingGroup = null;
+        if (commandInfo.ArgCount >= 3)
+        {
+            var groupArg = commandInfo.GetArg(2).Trim();
+            if (!string.IsNullOrWhiteSpace(groupArg))
+            {
+                _showingGroup = groupArg;
+            }
+        }
 
         // This will fire the OnRoundStart event listener
         Server.ExecuteCommand("mp_warmup_start");
@@ -487,6 +502,40 @@ public class RetakesPlugin : BasePlugin
         commandInfo.ReplyToCommand($"{MessagePrefix}Teleported to nearest spawn");
     }
 
+    [ConsoleCommand("css_gotospawn", "Goes to specified retakes spawn by Id.")]
+    [CommandHelper(minArgs: 1, usage: "<id>", whoCanExecute: CommandUsage.CLIENT_ONLY)]
+    [RequiresPermissions("@css/root")]
+    public void OnCommandGoToSpawn(CCSPlayerController? player, CommandInfo commandInfo)
+    {
+        if (!Helpers.DoesPlayerHaveAlivePawn(player))
+        {
+            return;
+        }
+
+        if (_mapConfig == null)
+        {
+            commandInfo.ReplyToCommand($"{MessagePrefix}Map config not loaded for some reason...");
+            return;
+        }
+
+        if (!int.TryParse(commandInfo.GetArg(1), out var id))
+        {
+            commandInfo.ReplyToCommand($"{MessagePrefix}Invalid id. Usage: css_gotospawn <id>");
+            return;
+        }
+
+        var spawn = _mapConfig.GetSpawnsClone().FirstOrDefault(s => s.Id == id);
+
+        if (spawn == null)
+        {
+            commandInfo.ReplyToCommand($"{MessagePrefix}Spawn with Id={id} not found.");
+            return;
+        }
+
+        player!.PlayerPawn.Value!.Teleport(spawn.Vector, spawn.QAngle, new Vector());
+        commandInfo.ReplyToCommand($"{MessagePrefix}Teleported to spawn Id={id}");
+    }
+
     [ConsoleCommand("css_hidespawns", "Exits the spawn editing mode.")]
     [ConsoleCommand("css_done", "Exits the spawn editing mode.")]
     [ConsoleCommand("css_exitedit", "Exits the spawn editing mode.")]
@@ -495,7 +544,137 @@ public class RetakesPlugin : BasePlugin
     public void OnCommandHideSpawns(CCSPlayerController? player, CommandInfo commandInfo)
     {
         _showingSpawnsForBombsite = null;
+        _showingGroup = null;
         Server.ExecuteCommand("mp_warmup_end");
+    }
+
+    [ConsoleCommand("css_listspawns", "Lists spawns with IDs and groups.")]
+    [CommandHelper(whoCanExecute: CommandUsage.CLIENT_AND_SERVER)]
+    [RequiresPermissions("@css/root")]
+    public void OnCommandListSpawns(CCSPlayerController? player, CommandInfo commandInfo)
+    {
+        if (player != null && !Helpers.IsValidPlayer(player))
+        {
+            return;
+        }
+
+        if (_mapConfig == null)
+        {
+            commandInfo.ReplyToCommand($"{MessagePrefix}Map config not loaded for some reason...");
+            return;
+        }
+
+        Bombsite? bombsiteFilter = null;
+        CsTeam? teamFilter = null;
+        string? groupFilter = null;
+
+        if (commandInfo.ArgCount >= 2)
+        {
+            var site = commandInfo.GetArg(1).Trim().ToUpper();
+            if (site == "A") bombsiteFilter = Bombsite.A; else if (site == "B") bombsiteFilter = Bombsite.B; else if (!string.IsNullOrWhiteSpace(site))
+            {
+                commandInfo.ReplyToCommand($"{MessagePrefix}You must specify a bombsite [A / B].");
+                return;
+            }
+        }
+
+        if (commandInfo.ArgCount >= 3)
+        {
+            var team = commandInfo.GetArg(2).Trim().ToUpper();
+            if (team == "T") teamFilter = CsTeam.Terrorist; else if (team == "CT") teamFilter = CsTeam.CounterTerrorist; else if (!string.IsNullOrWhiteSpace(team))
+            {
+                commandInfo.ReplyToCommand($"{MessagePrefix}You must specify a team [T / CT].");
+                return;
+            }
+        }
+
+        if (commandInfo.ArgCount >= 4)
+        {
+            var grp = commandInfo.GetArg(3).Trim();
+            if (!string.IsNullOrWhiteSpace(grp)) groupFilter = grp;
+        }
+
+        var spawns = _mapConfig.GetSpawnsClone();
+        if (bombsiteFilter != null) spawns = spawns.Where(s => s.Bombsite == bombsiteFilter).ToList();
+        if (teamFilter != null) spawns = spawns.Where(s => s.Team == teamFilter).ToList();
+        if (!string.IsNullOrWhiteSpace(groupFilter)) spawns = spawns.Where(s => !string.IsNullOrWhiteSpace(s.Group) && s.Group!.Equals(groupFilter, StringComparison.OrdinalIgnoreCase)).ToList();
+
+        if (spawns.Count == 0)
+        {
+            commandInfo.ReplyToCommand($"{MessagePrefix}No spawns found.");
+            return;
+        }
+
+        foreach (var s in spawns.OrderBy(s => s.Id))
+        {
+            commandInfo.ReplyToCommand($"{MessagePrefix}Id={s.Id} Group={(s.Group ?? "-")} Team={(s.Team == CsTeam.Terrorist ? "T" : "CT")} Site={s.Bombsite} Planter={(s.CanBePlanter ? "Y" : "N")} Vec=({s.Vector.X:0.00},{s.Vector.Y:0.00},{s.Vector.Z:0.00})");
+            player?.PrintToConsole($"Id={s.Id} Group={(s.Group ?? "-")} Team={s.Team} Site={s.Bombsite} Vec=({s.Vector.X},{s.Vector.Y},{s.Vector.Z}) Planter={s.CanBePlanter}");
+        }
+
+        commandInfo.ReplyToCommand($"{MessagePrefix}{spawns.Count} spawns listed.");
+    }
+
+    [ConsoleCommand("css_setspawngroup", "Sets group for a spawn by Id.")]
+    [CommandHelper(minArgs: 2, usage: "<id> <group>", whoCanExecute: CommandUsage.CLIENT_AND_SERVER)]
+    [RequiresPermissions("@css/root")]
+    public void OnCommandSetSpawnGroup(CCSPlayerController? player, CommandInfo commandInfo)
+    {
+        if (player != null && !Helpers.IsValidPlayer(player))
+        {
+            return;
+        }
+
+        if (_mapConfig == null)
+        {
+            commandInfo.ReplyToCommand($"{MessagePrefix}Map config not loaded for some reason...");
+            return;
+        }
+
+        if (!int.TryParse(commandInfo.GetArg(1), out var id))
+        {
+            commandInfo.ReplyToCommand($"{MessagePrefix}Invalid id. Usage: css_setspawngroup <id> <group>");
+            return;
+        }
+
+        var group = commandInfo.GetArg(2).Trim();
+        if (string.IsNullOrWhiteSpace(group))
+        {
+            commandInfo.ReplyToCommand($"{MessagePrefix}Invalid group. Usage: css_setspawngroup <id> <group>");
+            return;
+        }
+
+        var ok = _mapConfig.SetSpawnGroup(id, group);
+        commandInfo.ReplyToCommand(ok
+            ? $"{MessagePrefix}Set group '{group}' on spawn Id={id}."
+            : $"{MessagePrefix}Spawn with Id={id} not found.");
+    }
+
+    [ConsoleCommand("css_clearspawngroup", "Clears group for a spawn by Id.")]
+    [CommandHelper(minArgs: 1, usage: "<id>", whoCanExecute: CommandUsage.CLIENT_AND_SERVER)]
+    [RequiresPermissions("@css/root")]
+    public void OnCommandClearSpawnGroup(CCSPlayerController? player, CommandInfo commandInfo)
+    {
+        if (player != null && !Helpers.IsValidPlayer(player))
+        {
+            return;
+        }
+
+        if (_mapConfig == null)
+        {
+            commandInfo.ReplyToCommand($"{MessagePrefix}Map config not loaded for some reason...");
+            return;
+        }
+
+        if (!int.TryParse(commandInfo.GetArg(1), out var id))
+        {
+            commandInfo.ReplyToCommand($"{MessagePrefix}Invalid id. Usage: css_clearspawngroup <id>");
+            return;
+        }
+
+        var ok = _mapConfig.SetSpawnGroup(id, null);
+        commandInfo.ReplyToCommand(ok
+            ? $"{MessagePrefix}Cleared group on spawn Id={id}."
+            : $"{MessagePrefix}Spawn with Id={id} not found.");
     }
 
     [ConsoleCommand("css_scramble", "Sets teams to scramble on the next round.")]
@@ -708,7 +887,15 @@ public class RetakesPlugin : BasePlugin
 
             if (_mapConfig != null)
             {
-                Helpers.ShowSpawns(_mapConfig.GetSpawnsClone(), _showingSpawnsForBombsite);
+                var spawnsToShow = _mapConfig.GetSpawnsClone();
+                if (!string.IsNullOrWhiteSpace(_showingGroup))
+                {
+                    spawnsToShow = spawnsToShow
+                        .Where(s => !string.IsNullOrWhiteSpace(s.Group) &&
+                                    s.Group!.Equals(_showingGroup, StringComparison.OrdinalIgnoreCase))
+                        .ToList();
+                }
+                Helpers.ShowSpawns(spawnsToShow, _showingSpawnsForBombsite);
             }
 
             return HookResult.Continue;
@@ -733,6 +920,7 @@ public class RetakesPlugin : BasePlugin
 
         Helpers.Debug("Clearing _showingSpawnsForBombsite");
         _showingSpawnsForBombsite = null;
+        _showingGroup = null;
 
         _planter = _spawnManager.HandleRoundSpawns(_currentBombsite, _gameManager.QueueManager.ActivePlayers);
 

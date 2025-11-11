@@ -1,4 +1,4 @@
-﻿using System.Text.Json.Serialization;
+using System.Text.Json.Serialization;
 using CounterStrikeSharp.API.Modules.Utils;
 using RetakesPlugin.Modules.Configs.JsonConverters;
 using RetakesPluginShared.Enums;
@@ -22,4 +22,7 @@ public class Spawn
     public CsTeam Team { get; set; }
     public Bombsite Bombsite { get; set; }
     public bool CanBePlanter { get; set; }
+
+    public int Id { get; set; }
+    public string? Group { get; set; }
 }
