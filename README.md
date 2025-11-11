@@ -76,13 +76,17 @@ When the plugin is first loaded it will create a `retakes_config.json` file in t
 |--------------------|-----------------------------------|----------------------------------------------------------------------|-------------|
 | !forcebombsite     | <A / B>                           | Force the retakes to occur from a single bombsite.                   | @css/root   |
 | !forcebombsitestop |                                   | Clear the forced bombsite and return back to normal.                 | @css/root   |
-| !showspawns        | <A / B>                           | Show the spawns for the specified bombsite.                          | @css/root   |
+| !showspawns        | <A / B> [group]                   | Show the spawns for the specified bombsite (optionally by group).    | @css/root   |
 | !addspawn          | <CT / T> <Y / N (can be planter)> | Adds a retakes spawn point for the bombsite spawns currently shown.  | @css/root   |
 | !removespawn       |                                   | Removes the nearest spawn point for the bombsite currently shown.    | @css/root   |
 | !nearestspawn      |                                   | Teleports the player to the nearest spawn.                           | @css/root   |
 | !hidespawns        |                                   | Exits the spawn editing mode.                                        | @css/root   |
 | !mapconfig         | <Config file name>                | Forces a specific map config file to load.                           | @css/root   |
 | !mapconfigs        |                                   | Displays a list of available map configs.                            | @css/root   |
+| !listspawns        | [A / B] [T / CT] [group]          | Lists spawns with Id, Group, Team, Bombsite, and position.           | @css/root   |
+| !setspawngroup     | <id> <group>                      | Sets the group for a spawn by Id.                                    | @css/root   |
+| !clearspawngroup   | <id>                              | Clears the group for a spawn by Id.                                  | @css/root   |
+| !gotospawn         | <id>                              | Teleports the player to the spawn with the specified Id.             | @css/root   |
 | !scramble          |                                   | Scrambles the teams next round.                                      | @css/admin  |
 | !voices            |                                   | Toggles whether or not to hear the bombsite voice announcements.     |             |
 | css_debugqueues    |                                   | **SERVER ONLY** Shows the current queue state in the server console. |             |

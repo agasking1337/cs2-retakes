@@ -545,6 +545,7 @@ public class RetakesPlugin : BasePlugin
     {
         _showingSpawnsForBombsite = null;
         _showingGroup = null;
+        Helpers.RemoveSpawnTextLabels();
         Server.ExecuteCommand("mp_warmup_end");
     }
 
@@ -900,6 +901,9 @@ public class RetakesPlugin : BasePlugin
 
             return HookResult.Continue;
         }
+
+        // If we are not in warmup, ensure any world-text labels are cleaned up
+        Helpers.RemoveSpawnTextLabels();
 
         if (_gameManager == null)
         {

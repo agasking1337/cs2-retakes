@@ -355,6 +355,63 @@ public static class Helpers
 
         beam.Teleport(spawn.Vector, new QAngle(IntPtr.Zero), new Vector(IntPtr.Zero, IntPtr.Zero, IntPtr.Zero));
         beam.DispatchSpawn();
+        TryCreateWorldTextForSpawn(spawn, color);
+    }
+
+    private static readonly List<CBaseEntity> _spawnTextEntities = new();
+
+    private static void TryCreateWorldTextForSpawn(Spawn spawn, Color baseColor)
+    {
+        try
+        {
+            var text = Utilities.CreateEntityByName<CPointWorldText>("point_worldtext");
+            if (text == null)
+            {
+                Debug($"WorldText: CPointWorldText creation failed");
+                return;
+            }
+
+            text.DispatchSpawn();
+
+            text.MessageText = $"#{spawn.Id}";
+            text.Enabled = true;
+            text.Color = Color.FromArgb(255, baseColor);
+            text.FontSize = 40;
+            text.Fullbright = true;
+            text.WorldUnitsPerPx = 0.1f;
+            text.DepthOffset = 0.0f;
+            text.JustifyHorizontal = PointWorldTextJustifyHorizontal_t.POINT_WORLD_TEXT_JUSTIFY_HORIZONTAL_CENTER;
+            text.JustifyVertical = PointWorldTextJustifyVertical_t.POINT_WORLD_TEXT_JUSTIFY_VERTICAL_CENTER;
+
+            var pos = new Vector(spawn.Vector.X, spawn.Vector.Y, spawn.Vector.Z + 110.0f);
+            var ang = new QAngle(0, 0, 90);
+            text.Teleport(pos, ang, new Vector(0, 0, 0));
+
+            Debug($"WorldText: created for spawn {spawn.Id} at {spawn.Vector.X},{spawn.Vector.Y},{spawn.Vector.Z}");
+
+            _spawnTextEntities.Add(text);
+        }
+        catch
+        {
+            Debug("WorldText: exception during creation");
+        }
+    }
+
+    public static void RemoveSpawnTextLabels()
+    {
+        if (_spawnTextEntities.Count == 0)
+        {
+            return;
+        }
+        foreach (var ent in _spawnTextEntities.ToArray())
+        {
+            try
+            {
+                ent?.Remove();
+            }
+            catch { }
+        }
+        _spawnTextEntities.Clear();
     }
 
     public static bool HasQueuePriority(CCSPlayerController player, string[] queuePriorityFlags)
