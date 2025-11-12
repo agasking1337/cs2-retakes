@@ -11,6 +11,13 @@
     <ProjectReference Include="..\RetakesPluginShared\RetakesPluginShared.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Reference Include="T3MenuSharedAPI">
+      <HintPath>..\3rd_party\T3MenuSharedAPI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
   <Target Name="PostBuild" AfterTargets="PostBuildEvent" Condition=" '$(CopyPath)' != '' ">
     <Exec Command="copy &quot;$(TargetPath)&quot; &quot;$(CopyPath)&quot; " />
     <Exec Command="copy &quot;$(TargetDir)$(TargetName).pdb&quot; &quot;$(CopyPath)&quot; " />

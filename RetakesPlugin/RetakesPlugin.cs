@@ -16,6 +16,7 @@ using RetakesPlugin.Modules.Managers;
 using RetakesPluginShared;
 using RetakesPluginShared.Events;
 using Helpers = RetakesPlugin.Modules.Helpers;
+using T3MenuSharedApi;
 
 namespace RetakesPlugin;
 
@@ -38,6 +39,8 @@ public class RetakesPlugin : BasePlugin
     public static string MessagePrefix = $"[{ChatColors.Green}Retakes{ChatColors.White}] ";
     public static bool IsDebugMode;
     #endregion
+
+    private IT3MenuManager? _menuManager;
 
     #region Helpers
     private Translator _translator;
@@ -71,6 +74,11 @@ public class RetakesPlugin : BasePlugin
         _lastRoundWinner = CsTeam.None;
         _showingSpawnsForBombsite = null;
         _showingGroup = null;
+    }
+
+    public override void OnAllPluginsLoaded(bool hotReload)
+    {
+        _menuManager ??= new PluginCapability<IT3MenuManager>("t3menu:manager").Get();
     }
     #endregion
 
@@ -216,14 +224,25 @@ public class RetakesPlugin : BasePlugin
     }
 
     [ConsoleCommand("css_showspawns", "Show the spawns for the specified bombsite.")]
-    [ConsoleCommand("css_spawns", "Show the spawns for the specified bombsite.")]
+    [ConsoleCommand("css_spawns", "Show the spawns for the specified bombsite or open the spawns menu.")]
     [ConsoleCommand("css_edit", "Show the spawns for the specified bombsite.")]
-    [CommandHelper(minArgs: 1, usage: "[A/B]", whoCanExecute: CommandUsage.CLIENT_ONLY)]
+    [CommandHelper(minArgs: 0, usage: "[A/B] [group]", whoCanExecute: CommandUsage.CLIENT_ONLY)]
     [RequiresPermissions("@css/root")]
     public void OnCommandShowSpawns(CCSPlayerController? player, CommandInfo commandInfo)
     {
         if (player != null && !Helpers.IsValidPlayer(player))
         {
+            return;
+        }
+
+        if (string.Equals(commandInfo.GetArg(0), "css_spawns", StringComparison.OrdinalIgnoreCase) && commandInfo.ArgCount < 2)
+        {
+            if (_menuManager == null)
+            {
+                commandInfo.ReplyToCommand($"{MessagePrefix}T3Menu-API not found.");
+                return;
+            }
+            OpenSpawnsRootMenu(player!);
             return;
         }
 
@@ -272,6 +291,152 @@ public class RetakesPlugin : BasePlugin
         StartSpawnTextFacingLoop(player);
     }
 
+    private void OpenSpawnsRootMenu(CCSPlayerController player)
+    {
+        if (_menuManager == null) return;
+        var menu = _menuManager.CreateMenu("Spawns", false);
+
+        menu.AddOption("Site Spawns", (p, o) => BuildSiteSpawnsMenu(p));
+        menu.AddOption("Team Spawns", (p, o) => BuildTeamSpawnsMenu(p));
+        menu.AddOption("Group Spawns", (p, o) => BuildGroupSpawnsMenu(p));
+
+        _menuManager.OpenMainMenu(player, menu);
+    }
+
+    private void BuildSiteSpawnsMenu(CCSPlayerController player)
+    {
+        if (_menuManager == null) return;
+        var menu = _menuManager.CreateMenu("Site Spawns", true);
+
+        menu.AddOption("Show A", (p, o) => ShowSpawnsFromMenu(p, "A"));
+        menu.AddOption("Show B", (p, o) => ShowSpawnsFromMenu(p, "B"));
+        menu.AddOption("Hide", (p, o) => HideSpawnsFromMenu(p));
+
+        _menuManager.OpenMainMenu(player, menu);
+    }
+
+    private void BuildTeamSpawnsMenu(CCSPlayerController player)
+    {
+        if (_menuManager == null) return;
+        var menu = _menuManager.CreateMenu("Team Spawns", true);
+
+        var teams = new List<object> { "T", "CT" };
+        var sites = new List<object> { "A", "B" };
+        object selectedTeam = teams[0];
+        object selectedSite = sites[0];
+
+        menu.AddSliderOption("Team", teams, teams[0], 2, (p, o, i) =>
+        {
+            if (o is IT3Option so && so.DefaultValue != null) selectedTeam = so.DefaultValue;
+        });
+        menu.AddSliderOption("Site", sites, sites[0], 2, (p, o, i) =>
+        {
+            if (o is IT3Option so && so.DefaultValue != null) selectedSite = so.DefaultValue;
+        });
+
+        menu.AddOption("Show", (p, o) =>
+        {
+            ShowSpawnsFromMenu(p, selectedSite.ToString() ?? "A");
+        });
+
+        menu.AddOption("List", (p, o) =>
+        {
+            var team = selectedTeam.ToString();
+            var site = selectedSite.ToString();
+            Server.ExecuteCommand($"css_listspawns {site} {team}");
+        });
+
+        _menuManager.OpenMainMenu(player, menu);
+    }
+
+    private void BuildGroupSpawnsMenu(CCSPlayerController player)
+    {
+        if (_menuManager == null) return;
+        var menu = _menuManager.CreateMenu("Group Spawns", true);
+
+        var groups = _mapConfig?.GetGroupsClone() ?? new List<string>();
+        var sites = new List<object> { "A", "B" };
+        object? selectedGroup = groups.Count > 0 ? groups[0] : null;
+        object selectedSite = sites[0];
+
+        if (_mapConfig != null)
+        {
+            Helpers.SetGroupDisplayNames(_mapConfig.GetGroupsClone());
+        }
+
+        if (groups.Count > 0)
+        {
+            menu.AddSliderOption("Group", groups.Cast<object>().ToList(), groups[0], 4, (p, o, i) =>
+            {
+                if (o is IT3Option so && so.DefaultValue != null) selectedGroup = so.DefaultValue;
+            });
+        }
+
+        menu.AddSliderOption("Site", sites, sites[0], 2, (p, o, i) =>
+        {
+            if (o is IT3Option so && so.DefaultValue != null) selectedSite = so.DefaultValue;
+        });
+
+        menu.AddOption("Show", (p, o) =>
+        {
+            if (selectedGroup != null)
+            {
+                var site = selectedSite.ToString();
+                var grp = selectedGroup.ToString();
+                if (!string.IsNullOrWhiteSpace(site) && !string.IsNullOrWhiteSpace(grp))
+                {
+                    ShowSpawnsFromMenu(p, site!, grp);
+                }
+            }
+        });
+
+        menu.AddOption("Hide", (p, o) => HideSpawnsFromMenu(p));
+
+        menu.AddOption("Set Spawn Group", (p, o) => BuildSetSpawnGroupMenu(p));
+
+        _menuManager.OpenMainMenu(player, menu);
+    }
+
+    private void BuildSetSpawnGroupMenu(CCSPlayerController player)
+    {
+        if (_menuManager == null) return;
+        var menu = _menuManager.CreateMenu("Set Spawn Group", true);
+
+        var groups = _mapConfig?.GetGroupsClone() ?? new List<string>();
+        int spawnId = 0;
+        object? selected = groups.Count > 0 ? groups[0] : null;
+
+        menu.AddInputOption("Spawn Id", "id", (p, o, input) =>
+        {
+            var s = input.ToString();
+            if (int.TryParse(s, out var id)) spawnId = id;
+        }, "Type spawn id or 'cancel'.");
+
+        if (groups.Count > 0)
+        {
+            var values = groups.Cast<object>().ToList();
+            menu.AddSliderOption("Group", values, values[0], 4, (p, o, idx) =>
+            {
+                if (o is IT3Option so && so.DefaultValue != null)
+                {
+                    selected = so.DefaultValue;
+                }
+            });
+        }
+
+        menu.AddOption("Apply", (p, o) =>
+        {
+            if (spawnId > 0 && selected != null)
+            {
+                var name = selected.ToString();
+                if (!string.IsNullOrWhiteSpace(name)) Server.ExecuteCommand($"css_setspawngroup {spawnId} {name}");
+                _menuManager.Refresh();
+            }
+        });
+
+        _menuManager.OpenMainMenu(player, menu);
+    }
+
     private void StartSpawnTextFacingLoop(CCSPlayerController? player)
     {
         AddTimer(0.2f, () =>
@@ -283,6 +448,69 @@ public class RetakesPlugin : BasePlugin
             Helpers.UpdateSpawnTextFacing(player);
             StartSpawnTextFacingLoop(player);
         });
+    }
+
+    private void ShowSpawnsFromMenu(CCSPlayerController player, string site, string? group = null)
+    {
+        if (_mapConfig == null)
+        {
+            player.PrintToChat($"{MessagePrefix}Map config not loaded for some reason...");
+            return;
+        }
+
+        var bombsite = site.ToUpperInvariant();
+        if (bombsite != "A" && bombsite != "B")
+        {
+            player.PrintToChat($"{MessagePrefix}You must specify a bombsite [A / B].");
+            return;
+        }
+
+        _showingSpawnsForBombsite = bombsite == "A" ? Bombsite.A : Bombsite.B;
+
+        _showingGroup = null;
+        if (!string.IsNullOrWhiteSpace(group))
+        {
+            var resolved = ResolveGroupSlug(group);
+            if (string.IsNullOrWhiteSpace(resolved))
+            {
+                player.PrintToChat($"{MessagePrefix}Group '{group}' not found. Use css_listgroups.");
+                return;
+            }
+            _showingGroup = resolved;
+        }
+
+        Helpers.SetWorldTextFacingPlayer(player);
+        Helpers.SetGroupDisplayNames(_mapConfig.GetGroupsClone());
+        
+        if (Helpers.GetGameRules().WarmupPeriod)
+        {
+            Helpers.RemoveSpawnTextLabels();
+            var spawnsToShow = _mapConfig.GetSpawnsClone();
+            if (!string.IsNullOrWhiteSpace(_showingGroup))
+            {
+                spawnsToShow = spawnsToShow
+                    .Where(s => !string.IsNullOrWhiteSpace(s.Group) && s.Group!.Equals(_showingGroup, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+            }
+            Helpers.ShowSpawns(spawnsToShow, _showingSpawnsForBombsite);
+        }
+        else
+        {
+            Server.ExecuteCommand("mp_warmup_start");
+            Server.ExecuteCommand("mp_warmuptime 120");
+            Server.ExecuteCommand("mp_warmup_pausetimer 1");
+        }
+        StartSpawnTextFacingLoop(player);
+    }
+
+    private void HideSpawnsFromMenu(CCSPlayerController player)
+    {
+        _showingSpawnsForBombsite = null;
+        _showingGroup = null;
+        Helpers.RemoveSpawnTextLabels();
+        Helpers.ClearWorldTextFacingPlayer();
+        Helpers.ClearGroupDisplayNames();
+        Server.ExecuteCommand("mp_warmup_end");
     }
 
     [ConsoleCommand("css_add", "Creates a new retakes spawn for the bombsite currently shown.")]
