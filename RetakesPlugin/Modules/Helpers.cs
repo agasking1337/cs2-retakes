@@ -383,7 +383,8 @@ public static class Helpers
 
             text.DispatchSpawn();
 
-            text.MessageText = $"{spawn.Id}";
+            var label = string.IsNullOrWhiteSpace(spawn.Group) ? $"{spawn.Id}" : $"{spawn.Id} ({spawn.Group})";
+            text.MessageText = label;
             text.Enabled = true;
             text.Color = Color.White;
             text.FontSize = 48;
@@ -420,7 +421,7 @@ public static class Helpers
                 if (shadow != null)
                 {
                     shadow.DispatchSpawn();
-                    shadow.MessageText = $"{spawn.Id}";
+                    shadow.MessageText = label;
                     shadow.Enabled = true;
                     shadow.Color = Color.Black;
                     shadow.FontSize = 48;

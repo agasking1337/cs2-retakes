@@ -40,6 +40,7 @@ public class MapConfig
             // Ensure all spawns have a unique incremental Id
             if (_mapConfigData != null)
             {
+                _mapConfigData.Groups ??= new List<string>();
                 var changed = false;
                 var maxId = _mapConfigData.Spawns.Count == 0 ? 0 : _mapConfigData.Spawns.Max(s => s.Id);
                 var seen = new HashSet<int>();
@@ -94,6 +95,16 @@ public class MapConfig
         return _mapConfigData.Spawns.ToList();
     }
 
+    public List<string> GetGroupsClone()
+    {
+        if (_mapConfigData == null)
+        {
+            throw new Exception("Map config data is null");
+        }
+
+        return (_mapConfigData.Groups ?? new List<string>()).ToList();
+    }
+
     public bool AddSpawn(Spawn spawn)
     {
         _mapConfigData ??= new MapConfigData();
@@ -113,6 +124,66 @@ public class MapConfig
         }
 
         _mapConfigData.Spawns.Add(spawn);
+
+        Save();
+        Load();
+
+        return true;
+    }
+
+    public bool RemoveGroup(string group)
+    {
+        _mapConfigData ??= new MapConfigData();
+
+        var name = group.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return false;
+        }
+
+        _mapConfigData.Groups ??= new List<string>();
+
+        if (!_mapConfigData.Groups.Any(g => g.Equals(name, StringComparison.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+
+        _mapConfigData.Groups = _mapConfigData.Groups
+            .Where(g => !g.Equals(name, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        foreach (var s in _mapConfigData.Spawns)
+        {
+            if (!string.IsNullOrWhiteSpace(s.Group) && s.Group!.Equals(name, StringComparison.OrdinalIgnoreCase))
+            {
+                s.Group = null;
+            }
+        }
+
+        Save();
+        Load();
+
+        return true;
+    }
+
+    public bool AddGroup(string group)
+    {
+        _mapConfigData ??= new MapConfigData();
+
+        var name = group.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return false;
+        }
+
+        _mapConfigData.Groups ??= new List<string>();
+
+        if (_mapConfigData.Groups.Any(g => g.Equals(name, StringComparison.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+
+        _mapConfigData.Groups.Add(name);
 
         Save();
         Load();
@@ -149,6 +220,14 @@ public class MapConfig
         _mapConfigData.Spawns = _mapConfigData.Spawns
             .GroupBy(spawn => new { spawn.Vector, spawn.Bombsite })
             .Select(group => group.First())
+            .ToList();
+
+        _mapConfigData.Groups ??= new List<string>();
+        _mapConfigData.Groups = _mapConfigData.Groups
+            .Where(g => !string.IsNullOrWhiteSpace(g))
+            .Select(g => g.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(g => g, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         return _mapConfigData;
