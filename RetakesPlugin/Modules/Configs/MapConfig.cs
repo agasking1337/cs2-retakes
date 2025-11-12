@@ -143,18 +143,20 @@ public class MapConfig
 
         _mapConfigData.Groups ??= new List<string>();
 
-        if (!_mapConfigData.Groups.Any(g => g.Equals(name, StringComparison.OrdinalIgnoreCase)))
+        var slug = global::RetakesPlugin.Modules.Helpers.Slugify(name);
+
+        if (!_mapConfigData.Groups.Any(g => global::RetakesPlugin.Modules.Helpers.Slugify(g).Equals(slug, StringComparison.OrdinalIgnoreCase)))
         {
             return false;
         }
 
         _mapConfigData.Groups = _mapConfigData.Groups
-            .Where(g => !g.Equals(name, StringComparison.OrdinalIgnoreCase))
+            .Where(g => !global::RetakesPlugin.Modules.Helpers.Slugify(g).Equals(slug, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
         foreach (var s in _mapConfigData.Spawns)
         {
-            if (!string.IsNullOrWhiteSpace(s.Group) && s.Group!.Equals(name, StringComparison.OrdinalIgnoreCase))
+            if (!string.IsNullOrWhiteSpace(s.Group) && global::RetakesPlugin.Modules.Helpers.Slugify(s.Group!).Equals(slug, StringComparison.OrdinalIgnoreCase))
             {
                 s.Group = null;
             }
@@ -178,7 +180,8 @@ public class MapConfig
 
         _mapConfigData.Groups ??= new List<string>();
 
-        if (_mapConfigData.Groups.Any(g => g.Equals(name, StringComparison.OrdinalIgnoreCase)))
+        var slug = global::RetakesPlugin.Modules.Helpers.Slugify(name);
+        if (_mapConfigData.Groups.Any(g => global::RetakesPlugin.Modules.Helpers.Slugify(g).Equals(slug, StringComparison.OrdinalIgnoreCase)))
         {
             return false;
         }

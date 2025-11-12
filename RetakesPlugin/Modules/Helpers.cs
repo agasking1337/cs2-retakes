@@ -37,6 +37,67 @@ public static class Helpers
         _worldTextFacingPlayer = null;
     }
 
+    private static readonly Dictionary<string, string> _groupSlugToName = new(StringComparer.OrdinalIgnoreCase);
+    public static void SetGroupDisplayNames(IEnumerable<string> names)
+    {
+        _groupSlugToName.Clear();
+        foreach (var n in names)
+        {
+            if (string.IsNullOrWhiteSpace(n)) continue;
+            var key = Slugify(n);
+            if (!_groupSlugToName.ContainsKey(key))
+            {
+                _groupSlugToName[key] = n.Trim();
+            }
+        }
+    }
+    public static void ClearGroupDisplayNames()
+    {
+        _groupSlugToName.Clear();
+    }
+
+    public static string Slugify(string input)
+    {
+        var s = (input ?? string.Empty).Trim().ToLowerInvariant();
+        var chars = new List<char>(s.Length);
+        var lastUnderscore = false;
+        foreach (var ch in s)
+        {
+            if (char.IsLetterOrDigit(ch))
+            {
+                chars.Add(ch);
+                lastUnderscore = false;
+            }
+            else if (char.IsWhiteSpace(ch) || ch == '-' || ch == '_')
+            {
+                if (!lastUnderscore)
+                {
+                    chars.Add('_');
+                    lastUnderscore = true;
+                }
+            }
+        }
+        // Trim underscores
+        var result = new string(chars.ToArray()).Trim('_');
+        return result;
+    }
+
+    public static string? ResolveGroupLabel(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var key = Slugify(value);
+        if (_groupSlugToName.TryGetValue(key, out var display))
+        {
+            return display;
+        }
+        // Fallback: if original looks like a slug, keep it; else return original
+        return value;
+    }
+
     public static bool IsValidPlayer([NotNullWhen(true)] CCSPlayerController? player)
     {
         return player != null && player.IsValid;
@@ -383,7 +444,8 @@ public static class Helpers
 
             text.DispatchSpawn();
 
-            var label = string.IsNullOrWhiteSpace(spawn.Group) ? $"{spawn.Id}" : $"{spawn.Id} ({spawn.Group})";
+            var groupLabel = ResolveGroupLabel(spawn.Group);
+            var label = string.IsNullOrWhiteSpace(groupLabel) ? $"{spawn.Id}" : $"{spawn.Id} ({groupLabel})";
             text.MessageText = label;
             text.Enabled = true;
             text.Color = Color.White;

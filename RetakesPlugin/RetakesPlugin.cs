@@ -249,11 +249,21 @@ public class RetakesPlugin : BasePlugin
             var groupArg = commandInfo.GetArg(2).Trim();
             if (!string.IsNullOrWhiteSpace(groupArg))
             {
-                _showingGroup = groupArg;
+                var resolved = ResolveGroupSlug(groupArg);
+                if (string.IsNullOrWhiteSpace(resolved))
+                {
+                    commandInfo.ReplyToCommand($"{MessagePrefix}Group '{groupArg}' not found. Use css_listgroups.");
+                    return;
+                }
+                _showingGroup = resolved;
             }
         }
 
         Helpers.SetWorldTextFacingPlayer(player);
+        if (_mapConfig != null)
+        {
+            Helpers.SetGroupDisplayNames(_mapConfig.GetGroupsClone());
+        }
 
         // This will fire the OnRoundStart event listener
         Server.ExecuteCommand("mp_warmup_start");
@@ -563,6 +573,7 @@ public class RetakesPlugin : BasePlugin
         _showingGroup = null;
         Helpers.RemoveSpawnTextLabels();
         Helpers.ClearWorldTextFacingPlayer();
+        Helpers.ClearGroupDisplayNames();
         Server.ExecuteCommand("mp_warmup_end");
     }
 
@@ -654,17 +665,46 @@ public class RetakesPlugin : BasePlugin
             return;
         }
 
-        var group = commandInfo.GetArg(2).Trim();
-        if (string.IsNullOrWhiteSpace(group))
+        // Join remaining args to support spaces in group names
+        var parts = new List<string>();
+        for (var i = 2; i < commandInfo.ArgCount; i++)
+        {
+            var a = commandInfo.GetArg(i);
+            if (!string.IsNullOrWhiteSpace(a)) parts.Add(a);
+        }
+        var groupInput = string.Join(" ", parts).Trim();
+        if (string.IsNullOrWhiteSpace(groupInput))
         {
             commandInfo.ReplyToCommand($"{MessagePrefix}Invalid group. Usage: css_setspawngroup <id> <group>");
             return;
         }
 
-        var ok = _mapConfig.SetSpawnGroup(id, group);
+        // Resolve to existing group slug (supports prefixes). Do not create implicit groups here.
+        var resolved = ResolveGroupSlug(groupInput);
+        if (string.IsNullOrWhiteSpace(resolved))
+        {
+            commandInfo.ReplyToCommand($"{MessagePrefix}Group '{groupInput}' not found. Use css_addgroup first or try full name.");
+            return;
+        }
+
+        var ok = _mapConfig.SetSpawnGroup(id, resolved);
         commandInfo.ReplyToCommand(ok
-            ? $"{MessagePrefix}Set group '{group}' on spawn Id={id}."
+            ? $"{MessagePrefix}Set group '{groupInput}' on spawn Id={id}."
             : $"{MessagePrefix}Spawn with Id={id} not found.");
+
+        if (ok && _showingSpawnsForBombsite != null)
+        {
+            Helpers.RemoveSpawnTextLabels();
+            Helpers.SetGroupDisplayNames(_mapConfig.GetGroupsClone());
+            var spawnsToShow = _mapConfig.GetSpawnsClone();
+            if (!string.IsNullOrWhiteSpace(_showingGroup))
+            {
+                spawnsToShow = spawnsToShow
+                    .Where(s => !string.IsNullOrWhiteSpace(s.Group) && s.Group!.Equals(_showingGroup, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+            }
+            Helpers.ShowSpawns(spawnsToShow, _showingSpawnsForBombsite);
+        }
     }
 
     [ConsoleCommand("css_clearspawngroup", "Clears group for a spawn by Id.")]
@@ -693,6 +733,20 @@ public class RetakesPlugin : BasePlugin
         commandInfo.ReplyToCommand(ok
             ? $"{MessagePrefix}Cleared group on spawn Id={id}."
             : $"{MessagePrefix}Spawn with Id={id} not found.");
+
+        if (ok && _showingSpawnsForBombsite != null)
+        {
+            Helpers.RemoveSpawnTextLabels();
+            Helpers.SetGroupDisplayNames(_mapConfig.GetGroupsClone());
+            var spawnsToShow = _mapConfig.GetSpawnsClone();
+            if (!string.IsNullOrWhiteSpace(_showingGroup))
+            {
+                spawnsToShow = spawnsToShow
+                    .Where(s => !string.IsNullOrWhiteSpace(s.Group) && s.Group!.Equals(_showingGroup, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+            }
+            Helpers.ShowSpawns(spawnsToShow, _showingSpawnsForBombsite);
+        }
     }
 
     [ConsoleCommand("css_addgroup", "Creates a new spawn group for this map.")]
@@ -785,10 +839,47 @@ public class RetakesPlugin : BasePlugin
             return;
         }
 
-        var ok = _mapConfig.RemoveGroup(group);
+        var resolved = ResolveGroupSlug(group);
+        if (string.IsNullOrWhiteSpace(resolved))
+        {
+            commandInfo.ReplyToCommand($"{MessagePrefix}Group '{group}' not found. Use css_listgroups.");
+            return;
+        }
+
+        var ok = _mapConfig.RemoveGroup(resolved);
         commandInfo.ReplyToCommand(ok
             ? $"{MessagePrefix}Removed group '{group}'. Any spawns using it were cleared."
             : $"{MessagePrefix}Group '{group}' not found.");
+    }
+
+    private string? ResolveGroupSlug(string input)
+    {
+        if (_mapConfig == null) return null;
+        var groups = _mapConfig.GetGroupsClone();
+        if (groups.Count == 0) return null;
+
+        var slugIn = Helpers.Slugify(input);
+        var candidates = new List<(string Name, string Slug)>();
+        foreach (var name in groups)
+        {
+            var slug = Helpers.Slugify(name);
+            candidates.Add((name, slug));
+        }
+
+        // Exact display name match
+        var exactName = candidates.FirstOrDefault(c => c.Name.Equals(input, StringComparison.OrdinalIgnoreCase));
+        if (!string.IsNullOrEmpty(exactName.Name)) return exactName.Slug;
+
+        // Exact slug match
+        var exactSlug = candidates.FirstOrDefault(c => c.Slug.Equals(slugIn, StringComparison.OrdinalIgnoreCase));
+        if (!string.IsNullOrEmpty(exactSlug.Slug)) return exactSlug.Slug;
+
+        // Unique prefix match on slug or name
+        var prefix = candidates.Where(c => c.Slug.StartsWith(slugIn, StringComparison.OrdinalIgnoreCase)
+                                           || c.Name.StartsWith(input, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (prefix.Count == 1) return prefix[0].Slug;
+
+        return null;
     }
 
     [ConsoleCommand("css_scramble", "Sets teams to scramble on the next round.")]
