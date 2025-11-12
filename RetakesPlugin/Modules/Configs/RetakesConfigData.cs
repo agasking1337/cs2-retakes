@@ -23,4 +23,7 @@ public class RetakesConfigData
     public bool ShouldRemoveSpectators { get; set; } = true;
     public bool IsBalanceEnabled { get; set; } = true;
     public bool ShouldPreventTeamChangesMidRound { get; set; } = true;
+
+    public bool EnablePlayerSpawnGroupChange { get; set; } = true;
+    public string AllowSpawnChangePermission { get; set; } = "@css/vip";
 }

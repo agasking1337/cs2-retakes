@@ -444,8 +444,11 @@ public static class Helpers
 
             text.DispatchSpawn();
 
-            var groupLabel = ResolveGroupLabel(spawn.Group);
-            var label = string.IsNullOrWhiteSpace(groupLabel) ? $"{spawn.Id}" : $"{spawn.Id} ({groupLabel})";
+            var site = spawn.Bombsite == Bombsite.A ? "A" : "B";
+            var name = string.IsNullOrWhiteSpace(spawn.Name) ? null : spawn.Name!.Trim();
+            var label = string.IsNullOrWhiteSpace(name)
+                ? $"{spawn.Id} [{site}]"
+                : $"{name} [{site}]";
             text.MessageText = label;
             text.Enabled = true;
             text.Color = Color.White;

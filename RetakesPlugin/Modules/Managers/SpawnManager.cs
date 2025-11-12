@@ -55,8 +55,12 @@ public class SpawnManager
 
     /**
      * This function returns the player who should be the planter and moves all players to random spawns based on bombsite.
+     * getPreferredSpawnId: returns a preferred Spawn.Id (or null) for the given player on this map.
      */
-    public CCSPlayerController? HandleRoundSpawns(Bombsite bombsite, HashSet<CCSPlayerController> players)
+    public CCSPlayerController? HandleRoundSpawns(
+        Bombsite bombsite,
+        HashSet<CCSPlayerController> players,
+        Func<CCSPlayerController, int?>? getPreferredSpawnId = null)
     {
         Helpers.Debug($"Moving players to spawns.");
 
@@ -105,13 +109,25 @@ public class SpawnManager
                 planter = player;
             }
 
-            var count = spawns[team].Count;
+            // Try to use player's preferred spawn if provided and available
+            var availableSpawns = spawns[team];
+            Spawn? preferred = null;
+            if (getPreferredSpawnId != null)
+            {
+                var prefId = getPreferredSpawnId(player);
+                if (prefId != null)
+                {
+                    preferred = availableSpawns.FirstOrDefault(s => s.Id == prefId.Value);
+                }
+            }
+
+            var count = availableSpawns.Count;
             if (count == 0)
             {
                 continue;
             }
 
-            var spawn = player == planter ? randomPlanterSpawn : spawns[team][Helpers.Random.Next(count)];
+            var spawn = player == planter ? randomPlanterSpawn : (preferred ?? availableSpawns[Helpers.Random.Next(count)]);
 
             player.Pawn.Value!.Teleport(spawn.Vector, spawn.QAngle, new Vector());
             spawns[team].Remove(spawn);

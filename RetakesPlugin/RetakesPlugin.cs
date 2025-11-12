@@ -47,6 +47,9 @@ public class RetakesPlugin : BasePlugin
     private GameManager? _gameManager;
     private SpawnManager? _spawnManager;
     private BreakerManager? _breakerManager;
+    private PlayerPrefsManager? _playerPrefs;
+    private readonly HashSet<ulong> _openSpawnMenuNextRound = [];
+    private readonly HashSet<ulong> _menuOpenedThisRound = [];
 
     public static PluginCapability<IRetakesPluginEventSender> RetakesPluginEventSenderCapability { get; } = new("retakes_plugin:event_sender");
     #endregion
@@ -76,6 +79,98 @@ public class RetakesPlugin : BasePlugin
         _showingGroup = null;
     }
 
+    [ConsoleCommand("css_spawns", "Arm next-round CT spawn selection menu (VIP only).")]
+    [CommandHelper(whoCanExecute: CommandUsage.CLIENT_ONLY)]
+    public void OnCommandPlayerSpawns(CCSPlayerController? player, CommandInfo commandInfo)
+    {
+        if (player == null || !Helpers.IsValidPlayer(player))
+        {
+            return;
+        }
+
+        if (!RetakesConfig.IsLoaded(_retakesConfig) || _retakesConfig!.RetakesConfigData == null)
+        {
+            player.PrintToChat($"{MessagePrefix}Config not loaded.");
+            return;
+        }
+
+        var cfg = _retakesConfig.RetakesConfigData;
+        if (!cfg.EnablePlayerSpawnGroupChange)
+        {
+            player.PrintToChat($"{MessagePrefix}Spawn selection is disabled.");
+            return;
+        }
+
+        var tokens = (cfg.AllowSpawnChangePermission ?? "").Split(',').Select(t => (t ?? string.Empty).Trim()).Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => t.StartsWith("@") ? t : "@" + t).ToArray();
+        var authorized = tokens.Length == 0 || tokens.Any(flag => AdminManager.PlayerHasPermissions(player, flag));
+        if (!authorized)
+        {
+            player.PrintToChat($"{MessagePrefix}You are not allowed to choose spawns.");
+            return;
+        }
+
+        if (_openSpawnMenuNextRound.Contains(player.SteamID))
+        {
+            _openSpawnMenuNextRound.Remove(player.SteamID);
+            player.PrintToChat($"{MessagePrefix}Spawn selection auto-open disabled.");
+            return;
+        }
+
+        _openSpawnMenuNextRound.Add(player.SteamID);
+        var teamMsg = player.Team == CsTeam.CounterTerrorist ? "It will open each round." : "It will only open if you are CT.";
+        player.PrintToChat($"{MessagePrefix}Spawn selection auto-open enabled. {teamMsg}");
+    }
+
+    private void OpenPlayerSpawnGroupMenu(CCSPlayerController player, Bombsite bombsite)
+    {
+        if (_menuManager == null)
+        {
+            player.PrintToChat($"{MessagePrefix}T3Menu-API not found.");
+            return;
+        }
+
+        if (player.Team != CsTeam.CounterTerrorist)
+        {
+            player.PrintToChat($"{MessagePrefix}Spawn selection is available to CT only.");
+            return;
+        }
+
+        var mapName = Server.MapName;
+        var allSpawns = _mapConfig?.GetSpawnsClone() ?? new List<Spawn>();
+        var ctSpawns = allSpawns.Where(s => s.Team == CsTeam.CounterTerrorist && s.Bombsite == bombsite).ToList();
+
+        var menu = _menuManager.CreateMenu($"Choose Spawn — {mapName}", true);
+
+        // Reset option
+        menu.AddOption("Auto (no preference)", (p, o) =>
+        {
+            _playerPrefs?.SetSpawnId(p.SteamID, mapName, null);
+            p.PrintToChat($"{MessagePrefix}Spawn selection cleared.");
+        });
+
+        foreach (var s in ctSpawns.OrderBy(s => s.Bombsite).ThenBy(s => string.IsNullOrWhiteSpace(s.Name) ? $"Spawn {s.Id}" : s.Name))
+        {
+            var display = string.IsNullOrWhiteSpace(s.Name) ? $"Spawn {s.Id}" : s.Name!;
+            var site = s.Bombsite == Bombsite.A ? "A" : "B";
+            var label = $"{display} [{site}]";
+            var spawnId = s.Id;
+            var pos = s.Vector;
+            var ang = s.QAngle;
+            menu.AddOption(label, (p, o) =>
+            {
+                _playerPrefs?.SetSpawnId(p.SteamID, mapName, spawnId);
+                // Teleport instantly to the chosen spawn
+                if (Helpers.IsValidPlayer(p) && p.PawnIsAlive)
+                {
+                    p.Pawn.Value!.Teleport(pos, ang, new Vector());
+                }
+                p.PrintToChat($"{MessagePrefix}Spawn set to {label}.");
+            });
+        }
+
+        _menuManager.OpenMainMenu(player, menu);
+    }
+
     public override void OnAllPluginsLoaded(bool hotReload)
     {
         _menuManager ??= new PluginCapability<IT3MenuManager>("t3menu:manager").Get();
@@ -94,6 +189,9 @@ public class RetakesPlugin : BasePlugin
         MessagePrefix = _translator["retakes.prefix"];
 
         Helpers.Debug($"Plugin loaded!");
+
+        // Initialize player preferences storage
+        _playerPrefs = new PlayerPrefsManager(ModuleDirectory);
 
         RegisterListener<Listeners.OnMapStart>(mapName =>
         {
@@ -224,7 +322,7 @@ public class RetakesPlugin : BasePlugin
     }
 
     [ConsoleCommand("css_showspawns", "Show the spawns for the specified bombsite.")]
-    [ConsoleCommand("css_spawns", "Show the spawns for the specified bombsite or open the spawns menu.")]
+    [ConsoleCommand("css_editspawns", "Open the spawns edit menu (admin).")]
     [ConsoleCommand("css_edit", "Show the spawns for the specified bombsite.")]
     [CommandHelper(minArgs: 0, usage: "[A/B] [group]", whoCanExecute: CommandUsage.CLIENT_ONLY)]
     [RequiresPermissions("@css/root")]
@@ -235,7 +333,7 @@ public class RetakesPlugin : BasePlugin
             return;
         }
 
-        if (string.Equals(commandInfo.GetArg(0), "css_spawns", StringComparison.OrdinalIgnoreCase) && commandInfo.ArgCount < 2)
+        if (string.Equals(commandInfo.GetArg(0), "css_editspawns", StringComparison.OrdinalIgnoreCase) && commandInfo.ArgCount < 2)
         {
             if (_menuManager == null)
             {
@@ -1297,6 +1395,11 @@ public class RetakesPlugin : BasePlugin
         // Set round teams to prevent team changes mid round
         _gameManager.QueueManager.SetRoundTeams();
 
+        // Reset per-round menu open tracking
+        _menuOpenedThisRound.Clear();
+
+        // No longer opening here; handled in OnRoundPostStart after allocation
+
         return HookResult.Continue;
     }
 
@@ -1359,7 +1462,11 @@ public class RetakesPlugin : BasePlugin
         _showingSpawnsForBombsite = null;
         _showingGroup = null;
 
-        _planter = _spawnManager.HandleRoundSpawns(_currentBombsite, _gameManager.QueueManager.ActivePlayers);
+        _planter = _spawnManager.HandleRoundSpawns(
+            _currentBombsite,
+            _gameManager.QueueManager.ActivePlayers,
+            p => _playerPrefs?.GetSpawnId(p.SteamID, Server.MapName)
+        );
 
         if (!RetakesConfig.IsLoaded(_retakesConfig) ||
             _retakesConfig!.RetakesConfigData!.EnableFallbackBombsiteAnnouncement)
@@ -1368,6 +1475,20 @@ public class RetakesPlugin : BasePlugin
         }
 
         RetakesPluginEventSenderCapability.Get()?.TriggerEvent(new AnnounceBombsiteEvent(_currentBombsite));
+
+        // Redundant open: if FreezeEnd missed it, open now for CTs who toggled and haven't been opened this round
+        if (_menuManager != null && _openSpawnMenuNextRound.Count > 0)
+        {
+            foreach (var steamId in _openSpawnMenuNextRound)
+            {
+                if (_menuOpenedThisRound.Contains(steamId)) continue;
+                var p = Utilities.GetPlayers().FirstOrDefault(pl => pl.SteamID == steamId);
+                if (!Helpers.IsValidPlayer(p)) continue;
+                if (p.Team != CsTeam.CounterTerrorist) continue;
+                OpenPlayerSpawnGroupMenu(p, _currentBombsite);
+                _menuOpenedThisRound.Add(steamId);
+            }
+        }
 
         return HookResult.Continue;
     }
@@ -1439,6 +1560,22 @@ public class RetakesPlugin : BasePlugin
         if (Helpers.GetCurrentNumPlayers(CsTeam.Terrorist) > 0)
         {
             HandleAutoPlant();
+        }
+
+        // Auto-close any spawn selection menus when freeze time ends
+        if (_menuManager != null && _menuOpenedThisRound.Count > 0)
+        {
+            var opened = _menuOpenedThisRound.ToList();
+            foreach (var steamId in opened)
+            {
+                var p = Utilities.GetPlayers().FirstOrDefault(pl => pl.SteamID == steamId);
+                if (!Helpers.IsValidPlayer(p)) { continue; }
+                var active = _menuManager.GetActiveMenu(p);
+                if (active != null)
+                {
+                    _menuManager.CloseMenu(p);
+                }
+            }
         }
 
         return HookResult.Continue;
@@ -1552,6 +1689,13 @@ public class RetakesPlugin : BasePlugin
     [GameEventHandler]
     public HookResult OnRoundEnd(EventRoundEnd @event, GameEventInfo info)
     {
+        // Ignore warmup rounds when tracking winners to prevent bad streak counts
+        if (Helpers.GetGameRules().WarmupPeriod)
+        {
+            _lastRoundWinner = CsTeam.None;
+            return HookResult.Continue;
+        }
+
         _lastRoundWinner = (CsTeam)@event.Winner;
 
         return HookResult.Continue;
@@ -1570,6 +1714,34 @@ public class RetakesPlugin : BasePlugin
         }
 
         return _gameManager.RemoveSpectators(@event, _hasMutedVoices);
+    }
+
+    [GameEventHandler]
+    public HookResult OnPlayerTeamPost(EventPlayerTeam @event, GameEventInfo info)
+    {
+        if (_menuManager == null)
+        {
+            return HookResult.Continue;
+        }
+
+        var player = @event.Userid;
+        if (!Helpers.IsValidPlayer(player))
+        {
+            return HookResult.Continue;
+        }
+
+        // Only act if player toggled auto-open and became CT
+        if (_openSpawnMenuNextRound.Contains(player.SteamID) && player.Team == CsTeam.CounterTerrorist)
+        {
+            // During active rounds, prefer opening at RoundStart/FreezeEnd. If missed, open here with per-round guard.
+            if (!_menuOpenedThisRound.Contains(player.SteamID) && !Helpers.GetGameRules().WarmupPeriod)
+            {
+                OpenPlayerSpawnGroupMenu(player, _currentBombsite);
+                _menuOpenedThisRound.Add(player.SteamID);
+            }
+        }
+
+        return HookResult.Continue;
     }
 
     private HookResult OnCommandJoinTeam(CCSPlayerController? player, CommandInfo commandInfo)
