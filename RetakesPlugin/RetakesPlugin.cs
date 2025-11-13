@@ -169,6 +169,7 @@ public class RetakesPlugin : BasePlugin
         }
 
         _menuManager.OpenMainMenu(player, menu);
+        _menuOpenedThisRound.Add(player.SteamID);
     }
 
     public override void OnAllPluginsLoaded(bool hotReload)
@@ -399,6 +400,7 @@ public class RetakesPlugin : BasePlugin
         menu.AddOption("Group Spawns", (p, o) => BuildGroupSpawnsMenu(p));
 
         _menuManager.OpenMainMenu(player, menu);
+        _menuOpenedThisRound.Add(player.SteamID);
     }
 
     private void BuildSiteSpawnsMenu(CCSPlayerController player)
@@ -411,6 +413,7 @@ public class RetakesPlugin : BasePlugin
         menu.AddOption("Hide", (p, o) => HideSpawnsFromMenu(p));
 
         _menuManager.OpenMainMenu(player, menu);
+        _menuOpenedThisRound.Add(player.SteamID);
     }
 
     private void BuildTeamSpawnsMenu(CCSPlayerController player)
@@ -445,6 +448,7 @@ public class RetakesPlugin : BasePlugin
         });
 
         _menuManager.OpenMainMenu(player, menu);
+        _menuOpenedThisRound.Add(player.SteamID);
     }
 
     private void BuildGroupSpawnsMenu(CCSPlayerController player)
@@ -493,6 +497,7 @@ public class RetakesPlugin : BasePlugin
         menu.AddOption("Set Spawn Group", (p, o) => BuildSetSpawnGroupMenu(p));
 
         _menuManager.OpenMainMenu(player, menu);
+        _menuOpenedThisRound.Add(player.SteamID);
     }
 
     private void BuildSetSpawnGroupMenu(CCSPlayerController player)
@@ -533,6 +538,7 @@ public class RetakesPlugin : BasePlugin
         });
 
         _menuManager.OpenMainMenu(player, menu);
+        _menuOpenedThisRound.Add(player.SteamID);
     }
 
     private void StartSpawnTextFacingLoop(CCSPlayerController? player)
@@ -1550,6 +1556,22 @@ public class RetakesPlugin : BasePlugin
     [GameEventHandler]
     public HookResult OnRoundFreezeEnd(EventRoundFreezeEnd @event, GameEventInfo info)
     {
+        // Auto-close any spawn selection menus when freeze time ends (including warmup)
+        if (_menuManager != null && _menuOpenedThisRound.Count > 0)
+        {
+            var opened = _menuOpenedThisRound.ToList();
+            foreach (var steamId in opened)
+            {
+                var p = Utilities.GetPlayers().FirstOrDefault(pl => pl.SteamID == steamId);
+                if (!Helpers.IsValidPlayer(p)) { continue; }
+                try
+                {
+                    _menuManager.CloseMenu(p);
+                }
+                catch { }
+            }
+        }
+
         // If we are in warmup, skip.
         if (Helpers.GetGameRules().WarmupPeriod)
         {
@@ -1560,22 +1582,6 @@ public class RetakesPlugin : BasePlugin
         if (Helpers.GetCurrentNumPlayers(CsTeam.Terrorist) > 0)
         {
             HandleAutoPlant();
-        }
-
-        // Auto-close any spawn selection menus when freeze time ends
-        if (_menuManager != null && _menuOpenedThisRound.Count > 0)
-        {
-            var opened = _menuOpenedThisRound.ToList();
-            foreach (var steamId in opened)
-            {
-                var p = Utilities.GetPlayers().FirstOrDefault(pl => pl.SteamID == steamId);
-                if (!Helpers.IsValidPlayer(p)) { continue; }
-                var active = _menuManager.GetActiveMenu(p);
-                if (active != null)
-                {
-                    _menuManager.CloseMenu(p);
-                }
-            }
         }
 
         return HookResult.Continue;
