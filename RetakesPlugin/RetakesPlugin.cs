@@ -80,6 +80,7 @@ public class RetakesPlugin : BasePlugin
     }
 
     [ConsoleCommand("css_spawns", "Arm next-round CT spawn selection menu (VIP only).")]
+    [ConsoleCommand("spawns", "Arm next-round CT spawn selection menu (VIP only).")]
     [CommandHelper(whoCanExecute: CommandUsage.CLIENT_ONLY)]
     public void OnCommandPlayerSpawns(CCSPlayerController? player, CommandInfo commandInfo)
     {
@@ -140,13 +141,6 @@ public class RetakesPlugin : BasePlugin
         var ctSpawns = allSpawns.Where(s => s.Team == CsTeam.CounterTerrorist && s.Bombsite == bombsite).ToList();
 
         var menu = _menuManager.CreateMenu($"Choose Spawn — {mapName}", true);
-
-        // Reset option
-        menu.AddOption("Auto (no preference)", (p, o) =>
-        {
-            _playerPrefs?.SetSpawnId(p.SteamID, mapName, null);
-            p.PrintToChat($"{MessagePrefix}Spawn selection cleared.");
-        });
 
         foreach (var s in ctSpawns.OrderBy(s => s.Bombsite).ThenBy(s => string.IsNullOrWhiteSpace(s.Name) ? $"Spawn {s.Id}" : s.Name))
         {
@@ -370,7 +364,7 @@ public class RetakesPlugin : BasePlugin
                 var resolved = ResolveGroupSlug(groupArg);
                 if (string.IsNullOrWhiteSpace(resolved))
                 {
-                    commandInfo.ReplyToCommand($"{MessagePrefix}Group '{groupArg}' not found. Use css_listgroups.");
+                    commandInfo.ReplyToCommand($"{MessagePrefix}Group '{groupArg}' not found.");
                     return;
                 }
                 _showingGroup = resolved;
@@ -494,52 +488,11 @@ public class RetakesPlugin : BasePlugin
 
         menu.AddOption("Hide", (p, o) => HideSpawnsFromMenu(p));
 
-        menu.AddOption("Set Spawn Group", (p, o) => BuildSetSpawnGroupMenu(p));
-
         _menuManager.OpenMainMenu(player, menu);
         _menuOpenedThisRound.Add(player.SteamID);
     }
 
-    private void BuildSetSpawnGroupMenu(CCSPlayerController player)
-    {
-        if (_menuManager == null) return;
-        var menu = _menuManager.CreateMenu("Set Spawn Group", true);
-
-        var groups = _mapConfig?.GetGroupsClone() ?? new List<string>();
-        int spawnId = 0;
-        object? selected = groups.Count > 0 ? groups[0] : null;
-
-        menu.AddInputOption("Spawn Id", "id", (p, o, input) =>
-        {
-            var s = input.ToString();
-            if (int.TryParse(s, out var id)) spawnId = id;
-        }, "Type spawn id or 'cancel'.");
-
-        if (groups.Count > 0)
-        {
-            var values = groups.Cast<object>().ToList();
-            menu.AddSliderOption("Group", values, values[0], 4, (p, o, idx) =>
-            {
-                if (o is IT3Option so && so.DefaultValue != null)
-                {
-                    selected = so.DefaultValue;
-                }
-            });
-        }
-
-        menu.AddOption("Apply", (p, o) =>
-        {
-            if (spawnId > 0 && selected != null)
-            {
-                var name = selected.ToString();
-                if (!string.IsNullOrWhiteSpace(name)) Server.ExecuteCommand($"css_setspawngroup {spawnId} {name}");
-                _menuManager.Refresh();
-            }
-        });
-
-        _menuManager.OpenMainMenu(player, menu);
-        _menuOpenedThisRound.Add(player.SteamID);
-    }
+    
 
     private void StartSpawnTextFacingLoop(CCSPlayerController? player)
     {
@@ -577,7 +530,7 @@ public class RetakesPlugin : BasePlugin
             var resolved = ResolveGroupSlug(group);
             if (string.IsNullOrWhiteSpace(resolved))
             {
-                player.PrintToChat($"{MessagePrefix}Group '{group}' not found. Use css_listgroups.");
+                player.PrintToChat($"{MessagePrefix}Group '{group}' not found.");
                 return;
             }
             _showingGroup = resolved;
@@ -975,214 +928,7 @@ public class RetakesPlugin : BasePlugin
         commandInfo.ReplyToCommand($"{MessagePrefix}{spawns.Count} spawns listed.");
     }
 
-    [ConsoleCommand("css_setspawngroup", "Sets group for a spawn by Id.")]
-    [CommandHelper(minArgs: 2, usage: "<id> <group>", whoCanExecute: CommandUsage.CLIENT_AND_SERVER)]
-    [RequiresPermissions("@css/root")]
-    public void OnCommandSetSpawnGroup(CCSPlayerController? player, CommandInfo commandInfo)
-    {
-        if (player != null && !Helpers.IsValidPlayer(player))
-        {
-            return;
-        }
-
-        if (_mapConfig == null)
-        {
-            commandInfo.ReplyToCommand($"{MessagePrefix}Map config not loaded for some reason...");
-            return;
-        }
-
-        if (!int.TryParse(commandInfo.GetArg(1), out var id))
-        {
-            commandInfo.ReplyToCommand($"{MessagePrefix}Invalid id. Usage: css_setspawngroup <id> <group>");
-            return;
-        }
-
-        // Join remaining args to support spaces in group names
-        var parts = new List<string>();
-        for (var i = 2; i < commandInfo.ArgCount; i++)
-        {
-            var a = commandInfo.GetArg(i);
-            if (!string.IsNullOrWhiteSpace(a)) parts.Add(a);
-        }
-        var groupInput = string.Join(" ", parts).Trim();
-        if (string.IsNullOrWhiteSpace(groupInput))
-        {
-            commandInfo.ReplyToCommand($"{MessagePrefix}Invalid group. Usage: css_setspawngroup <id> <group>");
-            return;
-        }
-
-        // Resolve to existing group slug (supports prefixes). Do not create implicit groups here.
-        var resolved = ResolveGroupSlug(groupInput);
-        if (string.IsNullOrWhiteSpace(resolved))
-        {
-            commandInfo.ReplyToCommand($"{MessagePrefix}Group '{groupInput}' not found. Use css_addgroup first or try full name.");
-            return;
-        }
-
-        var ok = _mapConfig.SetSpawnGroup(id, resolved);
-        commandInfo.ReplyToCommand(ok
-            ? $"{MessagePrefix}Set group '{groupInput}' on spawn Id={id}."
-            : $"{MessagePrefix}Spawn with Id={id} not found.");
-
-        if (ok && _showingSpawnsForBombsite != null)
-        {
-            Helpers.RemoveSpawnTextLabels();
-            Helpers.SetGroupDisplayNames(_mapConfig.GetGroupsClone());
-            var spawnsToShow = _mapConfig.GetSpawnsClone();
-            if (!string.IsNullOrWhiteSpace(_showingGroup))
-            {
-                spawnsToShow = spawnsToShow
-                    .Where(s => !string.IsNullOrWhiteSpace(s.Group) && s.Group!.Equals(_showingGroup, StringComparison.OrdinalIgnoreCase))
-                    .ToList();
-            }
-            Helpers.ShowSpawns(spawnsToShow, _showingSpawnsForBombsite);
-        }
-    }
-
-    [ConsoleCommand("css_clearspawngroup", "Clears group for a spawn by Id.")]
-    [CommandHelper(minArgs: 1, usage: "<id>", whoCanExecute: CommandUsage.CLIENT_AND_SERVER)]
-    [RequiresPermissions("@css/root")]
-    public void OnCommandClearSpawnGroup(CCSPlayerController? player, CommandInfo commandInfo)
-    {
-        if (player != null && !Helpers.IsValidPlayer(player))
-        {
-            return;
-        }
-
-        if (_mapConfig == null)
-        {
-            commandInfo.ReplyToCommand($"{MessagePrefix}Map config not loaded for some reason...");
-            return;
-        }
-
-        if (!int.TryParse(commandInfo.GetArg(1), out var id))
-        {
-            commandInfo.ReplyToCommand($"{MessagePrefix}Invalid id. Usage: css_clearspawngroup <id>");
-            return;
-        }
-
-        var ok = _mapConfig.SetSpawnGroup(id, null);
-        commandInfo.ReplyToCommand(ok
-            ? $"{MessagePrefix}Cleared group on spawn Id={id}."
-            : $"{MessagePrefix}Spawn with Id={id} not found.");
-
-        if (ok && _showingSpawnsForBombsite != null)
-        {
-            Helpers.RemoveSpawnTextLabels();
-            Helpers.SetGroupDisplayNames(_mapConfig.GetGroupsClone());
-            var spawnsToShow = _mapConfig.GetSpawnsClone();
-            if (!string.IsNullOrWhiteSpace(_showingGroup))
-            {
-                spawnsToShow = spawnsToShow
-                    .Where(s => !string.IsNullOrWhiteSpace(s.Group) && s.Group!.Equals(_showingGroup, StringComparison.OrdinalIgnoreCase))
-                    .ToList();
-            }
-            Helpers.ShowSpawns(spawnsToShow, _showingSpawnsForBombsite);
-        }
-    }
-
-    [ConsoleCommand("css_addgroup", "Creates a new spawn group for this map.")]
-    [CommandHelper(minArgs: 1, usage: "<group>", whoCanExecute: CommandUsage.CLIENT_AND_SERVER)]
-    [RequiresPermissions("@css/root")]
-    public void OnCommandAddGroup(CCSPlayerController? player, CommandInfo commandInfo)
-    {
-        if (player != null && !Helpers.IsValidPlayer(player))
-        {
-            return;
-        }
-
-        if (_mapConfig == null)
-        {
-            commandInfo.ReplyToCommand($"{MessagePrefix}Map config not loaded for some reason...");
-            return;
-        }
-
-        // Join remaining args to support spaces in group names
-        var parts = new List<string>();
-        for (var i = 1; i < commandInfo.ArgCount; i++)
-        {
-            var a = commandInfo.GetArg(i);
-            if (!string.IsNullOrWhiteSpace(a)) parts.Add(a);
-        }
-        var group = string.Join(" ", parts).Trim();
-
-        if (string.IsNullOrWhiteSpace(group))
-        {
-            commandInfo.ReplyToCommand($"{MessagePrefix}Invalid group. Usage: css_addgroup <group>");
-            return;
-        }
-
-        var ok = _mapConfig.AddGroup(group);
-        commandInfo.ReplyToCommand(ok
-            ? $"{MessagePrefix}Created group '{group}'."
-            : $"{MessagePrefix}Group '{group}' already exists.");
-    }
-
-    [ConsoleCommand("css_listgroups", "Lists all spawn groups for this map.")]
-    [CommandHelper(whoCanExecute: CommandUsage.CLIENT_AND_SERVER)]
-    [RequiresPermissions("@css/root")]
-    public void OnCommandListGroups(CCSPlayerController? player, CommandInfo commandInfo)
-    {
-        if (_mapConfig == null)
-        {
-            commandInfo.ReplyToCommand($"{MessagePrefix}Map config not loaded for some reason...");
-            return;
-        }
-
-        var groups = _mapConfig.GetGroupsClone();
-        if (groups.Count == 0)
-        {
-            commandInfo.ReplyToCommand($"{MessagePrefix}No groups exist yet.");
-            return;
-        }
-
-        foreach (var g in groups)
-        {
-            commandInfo.ReplyToCommand($"{MessagePrefix}{g}");
-            player?.PrintToConsole(g);
-        }
-
-        commandInfo.ReplyToCommand($"{MessagePrefix}{groups.Count} groups listed.");
-    }
-
-    [ConsoleCommand("css_removegroup", "Deletes a spawn group and clears it from any spawns.")]
-    [CommandHelper(minArgs: 1, usage: "<group>", whoCanExecute: CommandUsage.CLIENT_AND_SERVER)]
-    [RequiresPermissions("@css/root")]
-    public void OnCommandRemoveGroup(CCSPlayerController? player, CommandInfo commandInfo)
-    {
-        if (_mapConfig == null)
-        {
-            commandInfo.ReplyToCommand($"{MessagePrefix}Map config not loaded for some reason...");
-            return;
-        }
-
-        // Join remaining args to support spaces in group names
-        var parts = new List<string>();
-        for (var i = 1; i < commandInfo.ArgCount; i++)
-        {
-            var a = commandInfo.GetArg(i);
-            if (!string.IsNullOrWhiteSpace(a)) parts.Add(a);
-        }
-        var group = string.Join(" ", parts).Trim();
-
-        if (string.IsNullOrWhiteSpace(group))
-        {
-            commandInfo.ReplyToCommand($"{MessagePrefix}Invalid group. Usage: css_removegroup <group>");
-            return;
-        }
-
-        var resolved = ResolveGroupSlug(group);
-        if (string.IsNullOrWhiteSpace(resolved))
-        {
-            commandInfo.ReplyToCommand($"{MessagePrefix}Group '{group}' not found. Use css_listgroups.");
-            return;
-        }
-
-        var ok = _mapConfig.RemoveGroup(resolved);
-        commandInfo.ReplyToCommand(ok
-            ? $"{MessagePrefix}Removed group '{group}'. Any spawns using it were cleared."
-            : $"{MessagePrefix}Group '{group}' not found.");
-    }
+    
 
     private string? ResolveGroupSlug(string input)
     {
