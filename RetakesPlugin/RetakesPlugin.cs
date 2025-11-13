@@ -64,7 +64,6 @@ public class RetakesPlugin : BasePlugin
     private CCSPlayerController? _planter;
     private CsTeam _lastRoundWinner = CsTeam.None;
     private Bombsite? _showingSpawnsForBombsite;
-    private string? _showingGroup;
     private Bombsite? _forcedBombsite;
 
     // TODO: We should really store this in SQLite, but for now we'll just store it in memory.
@@ -76,7 +75,6 @@ public class RetakesPlugin : BasePlugin
         _planter = null;
         _lastRoundWinner = CsTeam.None;
         _showingSpawnsForBombsite = null;
-        _showingGroup = null;
     }
 
     [ConsoleCommand("css_spawns", "Arm next-round CT spawn selection menu (VIP only).")]
@@ -142,11 +140,18 @@ public class RetakesPlugin : BasePlugin
 
         var menu = _menuManager.CreateMenu($"Choose Spawn — {mapName}", true);
 
-        foreach (var s in ctSpawns.OrderBy(s => s.Bombsite).ThenBy(s => string.IsNullOrWhiteSpace(s.Name) ? $"Spawn {s.Id}" : s.Name))
+        // Determine the currently preferred spawn for this player (if any)
+        var currentSpawnId = _playerPrefs?.GetSpawnId(player.SteamID, mapName);
+
+        foreach (var s in ctSpawns.OrderBy(s => string.IsNullOrWhiteSpace(s.Name) ? $"Spawn {s.Id}" : s.Name))
         {
-            var display = string.IsNullOrWhiteSpace(s.Name) ? $"Spawn {s.Id}" : s.Name!;
-            var site = s.Bombsite == Bombsite.A ? "A" : "B";
-            var label = $"{display} [{site}]";
+            // Base label: prefer Name, fall back to an Id-based label when unnamed
+            var baseLabel = string.IsNullOrWhiteSpace(s.Name) ? $"Spawn {s.Id}" : s.Name!;
+
+            // Highlight the spawn that is currently selected for this player (if any)
+            var label = (currentSpawnId != null && currentSpawnId.Value == s.Id)
+                ? $"{baseLabel} (selected)"
+                : baseLabel;
             var spawnId = s.Id;
             var pos = s.Vector;
             var ang = s.QAngle;
@@ -317,25 +322,12 @@ public class RetakesPlugin : BasePlugin
     }
 
     [ConsoleCommand("css_showspawns", "Show the spawns for the specified bombsite.")]
-    [ConsoleCommand("css_editspawns", "Open the spawns edit menu (admin).")]
-    [ConsoleCommand("css_edit", "Show the spawns for the specified bombsite.")]
-    [CommandHelper(minArgs: 0, usage: "[A/B] [group]", whoCanExecute: CommandUsage.CLIENT_ONLY)]
+    [CommandHelper(minArgs: 1, usage: "[A/B]", whoCanExecute: CommandUsage.CLIENT_ONLY)]
     [RequiresPermissions("@css/root")]
     public void OnCommandShowSpawns(CCSPlayerController? player, CommandInfo commandInfo)
     {
         if (player != null && !Helpers.IsValidPlayer(player))
         {
-            return;
-        }
-
-        if (string.Equals(commandInfo.GetArg(0), "css_editspawns", StringComparison.OrdinalIgnoreCase) && commandInfo.ArgCount < 2)
-        {
-            if (_menuManager == null)
-            {
-                commandInfo.ReplyToCommand($"{MessagePrefix}T3Menu-API not found.");
-                return;
-            }
-            OpenSpawnsRootMenu(player!);
             return;
         }
 
@@ -354,28 +346,7 @@ public class RetakesPlugin : BasePlugin
 
         _showingSpawnsForBombsite = bombsite == "A" ? Bombsite.A : Bombsite.B;
 
-        // Optional group filter as second argument
-        _showingGroup = null;
-        if (commandInfo.ArgCount >= 3)
-        {
-            var groupArg = commandInfo.GetArg(2).Trim();
-            if (!string.IsNullOrWhiteSpace(groupArg))
-            {
-                var resolved = ResolveGroupSlug(groupArg);
-                if (string.IsNullOrWhiteSpace(resolved))
-                {
-                    commandInfo.ReplyToCommand($"{MessagePrefix}Group '{groupArg}' not found.");
-                    return;
-                }
-                _showingGroup = resolved;
-            }
-        }
-
         Helpers.SetWorldTextFacingPlayer(player);
-        if (_mapConfig != null)
-        {
-            Helpers.SetGroupDisplayNames(_mapConfig.GetGroupsClone());
-        }
 
         // This will fire the OnRoundStart event listener
         Server.ExecuteCommand("mp_warmup_start");
@@ -383,116 +354,6 @@ public class RetakesPlugin : BasePlugin
         Server.ExecuteCommand("mp_warmup_pausetimer 1");
         StartSpawnTextFacingLoop(player);
     }
-
-    private void OpenSpawnsRootMenu(CCSPlayerController player)
-    {
-        if (_menuManager == null) return;
-        var menu = _menuManager.CreateMenu("Spawns", false);
-
-        menu.AddOption("Site Spawns", (p, o) => BuildSiteSpawnsMenu(p));
-        menu.AddOption("Team Spawns", (p, o) => BuildTeamSpawnsMenu(p));
-        menu.AddOption("Group Spawns", (p, o) => BuildGroupSpawnsMenu(p));
-
-        _menuManager.OpenMainMenu(player, menu);
-        _menuOpenedThisRound.Add(player.SteamID);
-    }
-
-    private void BuildSiteSpawnsMenu(CCSPlayerController player)
-    {
-        if (_menuManager == null) return;
-        var menu = _menuManager.CreateMenu("Site Spawns", true);
-
-        menu.AddOption("Show A", (p, o) => ShowSpawnsFromMenu(p, "A"));
-        menu.AddOption("Show B", (p, o) => ShowSpawnsFromMenu(p, "B"));
-        menu.AddOption("Hide", (p, o) => HideSpawnsFromMenu(p));
-
-        _menuManager.OpenMainMenu(player, menu);
-        _menuOpenedThisRound.Add(player.SteamID);
-    }
-
-    private void BuildTeamSpawnsMenu(CCSPlayerController player)
-    {
-        if (_menuManager == null) return;
-        var menu = _menuManager.CreateMenu("Team Spawns", true);
-
-        var teams = new List<object> { "T", "CT" };
-        var sites = new List<object> { "A", "B" };
-        object selectedTeam = teams[0];
-        object selectedSite = sites[0];
-
-        menu.AddSliderOption("Team", teams, teams[0], 2, (p, o, i) =>
-        {
-            if (o is IT3Option so && so.DefaultValue != null) selectedTeam = so.DefaultValue;
-        });
-        menu.AddSliderOption("Site", sites, sites[0], 2, (p, o, i) =>
-        {
-            if (o is IT3Option so && so.DefaultValue != null) selectedSite = so.DefaultValue;
-        });
-
-        menu.AddOption("Show", (p, o) =>
-        {
-            ShowSpawnsFromMenu(p, selectedSite.ToString() ?? "A");
-        });
-
-        menu.AddOption("List", (p, o) =>
-        {
-            var team = selectedTeam.ToString();
-            var site = selectedSite.ToString();
-            Server.ExecuteCommand($"css_listspawns {site} {team}");
-        });
-
-        _menuManager.OpenMainMenu(player, menu);
-        _menuOpenedThisRound.Add(player.SteamID);
-    }
-
-    private void BuildGroupSpawnsMenu(CCSPlayerController player)
-    {
-        if (_menuManager == null) return;
-        var menu = _menuManager.CreateMenu("Group Spawns", true);
-
-        var groups = _mapConfig?.GetGroupsClone() ?? new List<string>();
-        var sites = new List<object> { "A", "B" };
-        object? selectedGroup = groups.Count > 0 ? groups[0] : null;
-        object selectedSite = sites[0];
-
-        if (_mapConfig != null)
-        {
-            Helpers.SetGroupDisplayNames(_mapConfig.GetGroupsClone());
-        }
-
-        if (groups.Count > 0)
-        {
-            menu.AddSliderOption("Group", groups.Cast<object>().ToList(), groups[0], 4, (p, o, i) =>
-            {
-                if (o is IT3Option so && so.DefaultValue != null) selectedGroup = so.DefaultValue;
-            });
-        }
-
-        menu.AddSliderOption("Site", sites, sites[0], 2, (p, o, i) =>
-        {
-            if (o is IT3Option so && so.DefaultValue != null) selectedSite = so.DefaultValue;
-        });
-
-        menu.AddOption("Show", (p, o) =>
-        {
-            if (selectedGroup != null)
-            {
-                var site = selectedSite.ToString();
-                var grp = selectedGroup.ToString();
-                if (!string.IsNullOrWhiteSpace(site) && !string.IsNullOrWhiteSpace(grp))
-                {
-                    ShowSpawnsFromMenu(p, site!, grp);
-                }
-            }
-        });
-
-        menu.AddOption("Hide", (p, o) => HideSpawnsFromMenu(p));
-
-        _menuManager.OpenMainMenu(player, menu);
-        _menuOpenedThisRound.Add(player.SteamID);
-    }
-
-    
 
     private void StartSpawnTextFacingLoop(CCSPlayerController? player)
     {
@@ -507,68 +368,7 @@ public class RetakesPlugin : BasePlugin
         });
     }
 
-    private void ShowSpawnsFromMenu(CCSPlayerController player, string site, string? group = null)
-    {
-        if (_mapConfig == null)
-        {
-            player.PrintToChat($"{MessagePrefix}Map config not loaded for some reason...");
-            return;
-        }
-
-        var bombsite = site.ToUpperInvariant();
-        if (bombsite != "A" && bombsite != "B")
-        {
-            player.PrintToChat($"{MessagePrefix}You must specify a bombsite [A / B].");
-            return;
-        }
-
-        _showingSpawnsForBombsite = bombsite == "A" ? Bombsite.A : Bombsite.B;
-
-        _showingGroup = null;
-        if (!string.IsNullOrWhiteSpace(group))
-        {
-            var resolved = ResolveGroupSlug(group);
-            if (string.IsNullOrWhiteSpace(resolved))
-            {
-                player.PrintToChat($"{MessagePrefix}Group '{group}' not found.");
-                return;
-            }
-            _showingGroup = resolved;
-        }
-
-        Helpers.SetWorldTextFacingPlayer(player);
-        Helpers.SetGroupDisplayNames(_mapConfig.GetGroupsClone());
-        
-        if (Helpers.GetGameRules().WarmupPeriod)
-        {
-            Helpers.RemoveSpawnTextLabels();
-            var spawnsToShow = _mapConfig.GetSpawnsClone();
-            if (!string.IsNullOrWhiteSpace(_showingGroup))
-            {
-                spawnsToShow = spawnsToShow
-                    .Where(s => !string.IsNullOrWhiteSpace(s.Group) && s.Group!.Equals(_showingGroup, StringComparison.OrdinalIgnoreCase))
-                    .ToList();
-            }
-            Helpers.ShowSpawns(spawnsToShow, _showingSpawnsForBombsite);
-        }
-        else
-        {
-            Server.ExecuteCommand("mp_warmup_start");
-            Server.ExecuteCommand("mp_warmuptime 120");
-            Server.ExecuteCommand("mp_warmup_pausetimer 1");
-        }
-        StartSpawnTextFacingLoop(player);
-    }
-
-    private void HideSpawnsFromMenu(CCSPlayerController player)
-    {
-        _showingSpawnsForBombsite = null;
-        _showingGroup = null;
-        Helpers.RemoveSpawnTextLabels();
-        Helpers.ClearWorldTextFacingPlayer();
-        Helpers.ClearGroupDisplayNames();
-        Server.ExecuteCommand("mp_warmup_end");
-    }
+    
 
     [ConsoleCommand("css_add", "Creates a new retakes spawn for the bombsite currently shown.")]
     [ConsoleCommand("css_addspawn", "Creates a new retakes spawn for the bombsite currently shown.")]
@@ -855,14 +655,12 @@ public class RetakesPlugin : BasePlugin
     public void OnCommandHideSpawns(CCSPlayerController? player, CommandInfo commandInfo)
     {
         _showingSpawnsForBombsite = null;
-        _showingGroup = null;
         Helpers.RemoveSpawnTextLabels();
         Helpers.ClearWorldTextFacingPlayer();
-        Helpers.ClearGroupDisplayNames();
         Server.ExecuteCommand("mp_warmup_end");
     }
 
-    [ConsoleCommand("css_listspawns", "Lists spawns with IDs and groups.")]
+    [ConsoleCommand("css_listspawns", "Lists spawns with IDs and names.")]
     [CommandHelper(whoCanExecute: CommandUsage.CLIENT_AND_SERVER)]
     [RequiresPermissions("@css/root")]
     public void OnCommandListSpawns(CCSPlayerController? player, CommandInfo commandInfo)
@@ -880,7 +678,6 @@ public class RetakesPlugin : BasePlugin
 
         Bombsite? bombsiteFilter = null;
         CsTeam? teamFilter = null;
-        string? groupFilter = null;
 
         if (commandInfo.ArgCount >= 2)
         {
@@ -902,16 +699,9 @@ public class RetakesPlugin : BasePlugin
             }
         }
 
-        if (commandInfo.ArgCount >= 4)
-        {
-            var grp = commandInfo.GetArg(3).Trim();
-            if (!string.IsNullOrWhiteSpace(grp)) groupFilter = grp;
-        }
-
         var spawns = _mapConfig.GetSpawnsClone();
         if (bombsiteFilter != null) spawns = spawns.Where(s => s.Bombsite == bombsiteFilter).ToList();
         if (teamFilter != null) spawns = spawns.Where(s => s.Team == teamFilter).ToList();
-        if (!string.IsNullOrWhiteSpace(groupFilter)) spawns = spawns.Where(s => !string.IsNullOrWhiteSpace(s.Group) && s.Group!.Equals(groupFilter, StringComparison.OrdinalIgnoreCase)).ToList();
 
         if (spawns.Count == 0)
         {
@@ -921,44 +711,64 @@ public class RetakesPlugin : BasePlugin
 
         foreach (var s in spawns.OrderBy(s => s.Id))
         {
-            commandInfo.ReplyToCommand($"{MessagePrefix}Id={s.Id} Group={(s.Group ?? "-")} Team={(s.Team == CsTeam.Terrorist ? "T" : "CT")} Site={s.Bombsite} Planter={(s.CanBePlanter ? "Y" : "N")} Vec=({s.Vector.X:0.00},{s.Vector.Y:0.00},{s.Vector.Z:0.00})");
-            player?.PrintToConsole($"Id={s.Id} Group={(s.Group ?? "-")} Team={s.Team} Site={s.Bombsite} Vec=({s.Vector.X},{s.Vector.Y},{s.Vector.Z}) Planter={s.CanBePlanter}");
+            commandInfo.ReplyToCommand($"{MessagePrefix}Id={s.Id} Name={(s.Name ?? "-")} Team={(s.Team == CsTeam.Terrorist ? "T" : "CT")} Site={s.Bombsite} Planter={(s.CanBePlanter ? "Y" : "N")} Vec=({s.Vector.X:0.00},{s.Vector.Y:0.00},{s.Vector.Z:0.00})");
+            player?.PrintToConsole($"Id={s.Id} Name={(s.Name ?? "-")} Team={s.Team} Site={s.Bombsite} Vec=({s.Vector.X},{s.Vector.Y},{s.Vector.Z}) Planter={s.CanBePlanter}");
         }
 
         commandInfo.ReplyToCommand($"{MessagePrefix}{spawns.Count} spawns listed.");
     }
 
-    
-
-    private string? ResolveGroupSlug(string input)
+    [ConsoleCommand("css_addspawnname", "Sets a name for a spawn by Id.")]
+    [ConsoleCommand("addspawnname", "Sets a name for a spawn by Id.")]
+    [CommandHelper(minArgs: 2, usage: "<id> <name>", whoCanExecute: CommandUsage.CLIENT_AND_SERVER)]
+    [RequiresPermissions("@css/root")]
+    public void OnCommandAddSpawnName(CCSPlayerController? player, CommandInfo commandInfo)
     {
-        if (_mapConfig == null) return null;
-        var groups = _mapConfig.GetGroupsClone();
-        if (groups.Count == 0) return null;
-
-        var slugIn = Helpers.Slugify(input);
-        var candidates = new List<(string Name, string Slug)>();
-        foreach (var name in groups)
+        if (player != null && !Helpers.IsValidPlayer(player))
         {
-            var slug = Helpers.Slugify(name);
-            candidates.Add((name, slug));
+            return;
         }
 
-        // Exact display name match
-        var exactName = candidates.FirstOrDefault(c => c.Name.Equals(input, StringComparison.OrdinalIgnoreCase));
-        if (!string.IsNullOrEmpty(exactName.Name)) return exactName.Slug;
+        if (_mapConfig == null)
+        {
+            commandInfo.ReplyToCommand($"{MessagePrefix}Map config not loaded for some reason...");
+            return;
+        }
 
-        // Exact slug match
-        var exactSlug = candidates.FirstOrDefault(c => c.Slug.Equals(slugIn, StringComparison.OrdinalIgnoreCase));
-        if (!string.IsNullOrEmpty(exactSlug.Slug)) return exactSlug.Slug;
+        if (!int.TryParse(commandInfo.GetArg(1), out var id))
+        {
+            commandInfo.ReplyToCommand($"{MessagePrefix}Invalid id. Usage: css_addspawnname <id> <name>");
+            return;
+        }
 
-        // Unique prefix match on slug or name
-        var prefix = candidates.Where(c => c.Slug.StartsWith(slugIn, StringComparison.OrdinalIgnoreCase)
-                                           || c.Name.StartsWith(input, StringComparison.OrdinalIgnoreCase)).ToList();
-        if (prefix.Count == 1) return prefix[0].Slug;
+        var parts = new List<string>();
+        for (var i = 2; i < commandInfo.ArgCount; i++)
+        {
+            var a = commandInfo.GetArg(i);
+            if (!string.IsNullOrWhiteSpace(a)) parts.Add(a);
+        }
+        var name = string.Join(" ", parts).Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            commandInfo.ReplyToCommand($"{MessagePrefix}Invalid name. Usage: css_addspawnname <id> <name>");
+            return;
+        }
 
-        return null;
+        var ok = _mapConfig.SetSpawnName(id, name);
+        commandInfo.ReplyToCommand(ok
+            ? $"{MessagePrefix}Set name '{name}' on spawn Id={id}."
+            : $"{MessagePrefix}Spawn with Id={id} not found.");
+
+        if (ok && _showingSpawnsForBombsite != null)
+        {
+            Helpers.RemoveSpawnTextLabels();
+            var spawnsToShow = _mapConfig.GetSpawnsClone();
+            Helpers.ShowSpawns(spawnsToShow, _showingSpawnsForBombsite);
+        }
     }
+
+
+    
 
     [ConsoleCommand("css_scramble", "Sets teams to scramble on the next round.")]
     [ConsoleCommand("css_scrambleteams", "Sets teams to scramble on the next round.")]
@@ -1176,13 +986,6 @@ public class RetakesPlugin : BasePlugin
             if (_mapConfig != null)
             {
                 var spawnsToShow = _mapConfig.GetSpawnsClone();
-                if (!string.IsNullOrWhiteSpace(_showingGroup))
-                {
-                    spawnsToShow = spawnsToShow
-                        .Where(s => !string.IsNullOrWhiteSpace(s.Group) &&
-                                    s.Group!.Equals(_showingGroup, StringComparison.OrdinalIgnoreCase))
-                        .ToList();
-                }
                 Helpers.ShowSpawns(spawnsToShow, _showingSpawnsForBombsite);
             }
 
@@ -1212,7 +1015,6 @@ public class RetakesPlugin : BasePlugin
 
         Helpers.Debug("Clearing _showingSpawnsForBombsite");
         _showingSpawnsForBombsite = null;
-        _showingGroup = null;
 
         _planter = _spawnManager.HandleRoundSpawns(
             _currentBombsite,

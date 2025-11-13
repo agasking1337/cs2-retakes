@@ -7,7 +7,7 @@
                        "Bombsite":  0,
                        "CanBePlanter":  false,
                        "Id":  1,
-                       "Group":  null
+                       "Name":  null
                    },
                    {
                        "Vector":  "-426.19086 2163.7827 1687.0312",
@@ -16,7 +16,7 @@
                        "Bombsite":  0,
                        "CanBePlanter":  false,
                        "Id":  2,
-                       "Group":  null
+                       "Name":  null
                    },
                    {
                        "Vector":  "530.5122 -135.95178 1748.0312",
@@ -25,7 +25,7 @@
                        "Bombsite":  0,
                        "CanBePlanter":  false,
                        "Id":  3,
-                       "Group":  null
+                       "Name":  null
                    },
                    {
                        "Vector":  "-564.94867 -435.6573 1659.0205",
@@ -34,7 +34,7 @@
                        "Bombsite":  0,
                        "CanBePlanter":  false,
                        "Id":  4,
-                       "Group":  null
+                       "Name":  null
                    },
                    {
                        "Vector":  "370.14374 460.2083 1616.3209",
@@ -43,7 +43,7 @@
                        "Bombsite":  0,
                        "CanBePlanter":  false,
                        "Id":  5,
-                       "Group":  null
+                       "Name":  null
                    },
                    {
                        "Vector":  "1055.1146 150.50739 1612.0312",
@@ -52,7 +52,7 @@
                        "Bombsite":  0,
                        "CanBePlanter":  false,
                        "Id":  6,
-                       "Group":  null
+                       "Name":  null
                    },
                    {
                        "Vector":  "-965.4935 -486.7514 1612.0938",
@@ -61,7 +61,7 @@
                        "Bombsite":  0,
                        "CanBePlanter":  false,
                        "Id":  7,
-                       "Group":  null
+                       "Name":  null
                    },
                    {
                        "Vector":  "-52.70166 2028.946 1687.0312",
@@ -70,7 +70,7 @@
                        "Bombsite":  0,
                        "CanBePlanter":  true,
                        "Id":  8,
-                       "Group":  null
+                       "Name":  null
                    },
                    {
                        "Vector":  "-167.70996 2009.9249 1687.0312",
@@ -79,7 +79,7 @@
                        "Bombsite":  0,
                        "CanBePlanter":  true,
                        "Id":  9,
-                       "Group":  null
+                       "Name":  null
                    },
                    {
                        "Vector":  "1675.7158 433.6111 1612.0312",
@@ -88,7 +88,7 @@
                        "Bombsite":  0,
                        "CanBePlanter":  false,
                        "Id":  10,
-                       "Group":  null
+                       "Name":  null
                    },
                    {
                        "Vector":  "220.42476 1943.33 1687.2749",
@@ -97,7 +97,7 @@
                        "Bombsite":  0,
                        "CanBePlanter":  false,
                        "Id":  11,
-                       "Group":  null
+                       "Name":  null
                    },
                    {
                        "Vector":  "797.99524 1994.3889 1704.2843",
@@ -106,7 +106,7 @@
                        "Bombsite":  0,
                        "CanBePlanter":  false,
                        "Id":  12,
-                       "Group":  null
+                       "Name":  null
                    },
                    {
                        "Vector":  "-537.23694 -93.11426 1666.0049",
@@ -115,7 +115,7 @@
                        "Bombsite":  0,
                        "CanBePlanter":  false,
                        "Id":  13,
-                       "Group":  null
+                       "Name":  null
                    },
                    {
                        "Vector":  "-85.16113 1829.0667 1687.0326",
@@ -124,7 +124,7 @@
                        "Bombsite":  0,
                        "CanBePlanter":  true,
                        "Id":  14,
-                       "Group":  null
+                       "Name":  null
                    },
                    {
                        "Vector":  "-454.53986 253.37761 1664.0875",
@@ -133,7 +133,7 @@
                        "Bombsite":  0,
                        "CanBePlanter":  false,
                        "Id":  15,
-                       "Group":  null
+                       "Name":  null
                    },
                    {
                        "Vector":  "112.10849 -645.7037 1612.0312",
@@ -142,7 +142,7 @@
                        "Bombsite":  1,
                        "CanBePlanter":  false,
                        "Id":  16,
-                       "Group":  null
+                       "Name":  null
                    },
                    {
                        "Vector":  "38.96541 -410.5996 1612.0315",
@@ -151,7 +151,7 @@
                        "Bombsite":  1,
                        "CanBePlanter":  false,
                        "Id":  17,
-                       "Group":  null
+                       "Name":  null
                    },
                    {
                        "Vector":  "-260.18933 -263.54498 1612.0315",
@@ -160,7 +160,7 @@
                        "Bombsite":  1,
                        "CanBePlanter":  false,
                        "Id":  18,
-                       "Group":  null
+                       "Name":  null
                    },
                    {
                        "Vector":  "-39.28589 -1089.934 1659.0312",
@@ -169,7 +169,7 @@
                        "Bombsite":  1,
                        "CanBePlanter":  true,
                        "Id":  19,
-                       "Group":  null
+                       "Name":  null
                    },
                    {
                        "Vector":  "204.96872 -1454.9694 1659.7084",
@@ -178,7 +178,7 @@
                        "Bombsite":  1,
                        "CanBePlanter":  true,
                        "Id":  20,
-                       "Group":  null
+                       "Name":  null
                    },
                    {
                        "Vector":  "181.90877 -1275.5289 1660.0312",
@@ -187,7 +187,7 @@
                        "Bombsite":  1,
                        "CanBePlanter":  true,
                        "Id":  21,
-                       "Group":  null
+                       "Name":  null
                    },
                    {
                        "Vector":  "73.0746 -1449.4857 1659.0312",
@@ -196,7 +196,7 @@
                        "Bombsite":  1,
                        "CanBePlanter":  true,
                        "Id":  22,
-                       "Group":  null
+                       "Name":  null
                    },
                    {
                        "Vector":  "-135.96872 -1454.9808 1659.0312",
@@ -205,7 +205,7 @@
                        "Bombsite":  1,
                        "CanBePlanter":  true,
                        "Id":  23,
-                       "Group":  null
+                       "Name":  null
                    },
                    {
                        "Vector":  "-547.1575 163.76521 1662.0312",
@@ -214,7 +214,7 @@
                        "Bombsite":  1,
                        "CanBePlanter":  false,
                        "Id":  24,
-                       "Group":  null
+                       "Name":  null
                    },
                    {
                        "Vector":  "-1210.2491 319.78955 1612.2812",
@@ -223,7 +223,7 @@
                        "Bombsite":  1,
                        "CanBePlanter":  false,
                        "Id":  25,
-                       "Group":  null
+                       "Name":  null
                    },
                    {
                        "Vector":  "1786.6544 -703.06866 1612.0759",
@@ -232,7 +232,7 @@
                        "Bombsite":  1,
                        "CanBePlanter":  false,
                        "Id":  26,
-                       "Group":  null
+                       "Name":  null
                    },
                    {
                        "Vector":  "-825.3157 606.30457 1633.837",
@@ -241,7 +241,7 @@
                        "Bombsite":  1,
                        "CanBePlanter":  false,
                        "Id":  27,
-                       "Group":  null
+                       "Name":  null
                    },
                    {
                        "Vector":  "-266.07788 399.4657 1613.0312",
@@ -250,7 +250,7 @@
                        "Bombsite":  1,
                        "CanBePlanter":  false,
                        "Id":  28,
-                       "Group":  null
+                       "Name":  null
                    },
                    {
                        "Vector":  "555.2382 653.47833 1613.0312",
@@ -259,7 +259,7 @@
                        "Bombsite":  1,
                        "CanBePlanter":  false,
                        "Id":  29,
-                       "Group":  null
+                       "Name":  null
                    },
                    {
                        "Vector":  "1050.5557 -231.46716 1612.0312",
@@ -268,7 +268,7 @@
                        "Bombsite":  1,
                        "CanBePlanter":  false,
                        "Id":  30,
-                       "Group":  null
+                       "Name":  null
                    },
                    {
                        "Vector":  "-980.65094 1009.6074 1681.4651",
@@ -277,7 +277,7 @@
                        "Bombsite":  1,
                        "CanBePlanter":  false,
                        "Id":  31,
-                       "Group":  null
+                       "Name":  null
                    },
                    {
                        "Vector":  "246.33647 439.47473 1615.7766",
@@ -286,7 +286,7 @@
                        "Bombsite":  1,
                        "CanBePlanter":  false,
                        "Id":  32,
-                       "Group":  null
+                       "Name":  null
                    },
                    {
                        "Vector":  "-300.5824 618.87946 1639.1337",
@@ -295,7 +295,7 @@
                        "Bombsite":  1,
                        "CanBePlanter":  false,
                        "Id":  33,
-                       "Group":  null
+                       "Name":  null
                    }
                ]
 }
