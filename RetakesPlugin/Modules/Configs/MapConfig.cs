@@ -110,8 +110,18 @@ public class MapConfig
         // Assign an Id if missing
         if (spawn.Id <= 0)
         {
-            var maxId = _mapConfigData.Spawns.Count == 0 ? 0 : _mapConfigData.Spawns.Max(s => s.Id);
-            spawn.Id = maxId + 1;
+            var existingIds = _mapConfigData.Spawns
+                .Select(s => s.Id)
+                .Where(id => id > 0)
+                .ToHashSet();
+
+            var candidateId = 1;
+            while (existingIds.Contains(candidateId))
+            {
+                candidateId++;
+            }
+
+            spawn.Id = candidateId;
         }
 
         _mapConfigData.Spawns.Add(spawn);

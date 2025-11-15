@@ -444,8 +444,6 @@ public class RetakesPlugin : BasePlugin
                 : player.PlayerPawn.Value.InBombZoneTrigger,
             Bombsite = (Bombsite)_showingSpawnsForBombsite
         };
-        Helpers.ShowSpawn(newSpawn);
-
         if (_mapConfig == null)
         {
             commandInfo.ReplyToCommand($"{MessagePrefix}Map config not loaded for some reason...");
@@ -456,6 +454,7 @@ public class RetakesPlugin : BasePlugin
         if (didAddSpawn)
         {
             _spawnManager.CalculateMapSpawns();
+            Helpers.ShowSpawn(newSpawn);
         }
 
         commandInfo.ReplyToCommand($"{MessagePrefix}{(didAddSpawn ? "Spawn added" : "Error adding spawn")}");
@@ -541,10 +540,42 @@ public class RetakesPlugin : BasePlugin
             }
         }
 
+        var siteTag = closestSpawn.Bombsite == Bombsite.A ? "A" : "B";
+        var labelSuffix = $"[{siteTag}]";
+        var labelPrefixWithSpace = $"{closestSpawn.Id} ";
+        var labelPrefixNoSpace = $"{closestSpawn.Id}[";
+
+        var textEntities = Utilities.FindAllEntitiesByDesignerName<CPointWorldText>("point_worldtext");
+        foreach (var text in textEntities)
+        {
+            var msg = text.MessageText;
+            if (string.IsNullOrWhiteSpace(msg))
+            {
+                continue;
+            }
+
+            if (!msg.EndsWith(labelSuffix))
+            {
+                continue;
+            }
+
+            if (msg.StartsWith(labelPrefixWithSpace) || msg.StartsWith(labelPrefixNoSpace))
+            {
+                text.Remove();
+            }
+        }
+
         var didRemoveSpawn = _mapConfig.RemoveSpawn(closestSpawn);
         if (didRemoveSpawn)
         {
             _spawnManager.CalculateMapSpawns();
+
+            if (_showingSpawnsForBombsite != null)
+            {
+                Helpers.RemoveSpawnTextLabels();
+                var spawnsToShow = _mapConfig.GetSpawnsClone();
+                Helpers.ShowSpawns(spawnsToShow, _showingSpawnsForBombsite);
+            }
         }
 
         commandInfo.ReplyToCommand($"{MessagePrefix}{(didRemoveSpawn ? "Spawn removed" : "Error removing spawn")}");
