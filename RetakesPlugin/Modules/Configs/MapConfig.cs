@@ -134,17 +134,46 @@ public class MapConfig
 
     
 
-    public bool RemoveSpawn(Spawn spawn)
+    public bool RemoveSpawnById(int id)
     {
         _mapConfigData ??= new MapConfigData();
 
-        if (!_mapConfigData.Spawns.Any(existingSpawn =>
-                existingSpawn.Vector == spawn.Vector && existingSpawn.Bombsite == spawn.Bombsite))
+        var existingSpawn = _mapConfigData.Spawns.FirstOrDefault(s => s.Id == id);
+
+        if (existingSpawn == null)
         {
             return false; // Spawn doesn't exist, avoid removing
         }
 
-        _mapConfigData.Spawns.Remove(spawn);
+        _mapConfigData.Spawns.Remove(existingSpawn);
+
+        Save();
+        Load();
+
+        return true;
+    }
+
+    public bool RemoveSpawn(Spawn spawn)
+    {
+        _mapConfigData ??= new MapConfigData();
+
+        if (spawn.Id > 0)
+        {
+            if (RemoveSpawnById(spawn.Id))
+            {
+                return true;
+            }
+        }
+
+        var existingSpawn = _mapConfigData.Spawns.FirstOrDefault(s =>
+            s.Vector == spawn.Vector && s.Bombsite == spawn.Bombsite);
+
+        if (existingSpawn == null)
+        {
+            return false;
+        }
+
+        _mapConfigData.Spawns.Remove(existingSpawn);
 
         Save();
         Load();

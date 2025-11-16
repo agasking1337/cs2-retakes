@@ -138,7 +138,7 @@ public class RetakesPlugin : BasePlugin
         var allSpawns = _mapConfig?.GetSpawnsClone() ?? new List<Spawn>();
         var ctSpawns = allSpawns.Where(s => s.Team == CsTeam.CounterTerrorist && s.Bombsite == bombsite).ToList();
 
-        var menu = _menuManager.CreateMenu($"Choose Spawn — {mapName}", true);
+        var menu = _menuManager.CreateMenu("Choose Spawn", true);
 
         // Determine the currently preferred spawn for this player (if any)
         var currentSpawnId = _playerPrefs?.GetSpawnId(player.SteamID, mapName);
@@ -491,34 +491,57 @@ public class RetakesPlugin : BasePlugin
             return;
         }
 
-        var spawns = _spawnManager.GetSpawns((Bombsite)_showingSpawnsForBombsite);
+        Spawn? spawnToRemove = null;
 
-        if (spawns.Count == 0)
+        // If an Id argument is provided, try to remove by Id first
+        if (commandInfo.ArgCount >= 2)
         {
-            commandInfo.ReplyToCommand($"{MessagePrefix}No spawns found.");
-            return;
-        }
-
-        var closestDistance = 9999.9;
-        Spawn? closestSpawn = null;
-
-        foreach (var spawn in spawns)
-        {
-            var distance = Helpers.GetDistanceBetweenVectors(spawn.Vector, player!.PlayerPawn.Value!.AbsOrigin!);
-
-            if (distance > 128.0 || distance > closestDistance)
+            var idArg = commandInfo.GetArg(1);
+            if (!int.TryParse(idArg, out var id))
             {
-                continue;
+                commandInfo.ReplyToCommand($"{MessagePrefix}Invalid id. Usage: css_remove <id> (optional)");
+                return;
             }
 
-            closestDistance = distance;
-            closestSpawn = spawn;
-        }
+            var spawnById = _mapConfig.GetSpawnsClone().FirstOrDefault(s => s.Id == id);
+            if (spawnById == null)
+            {
+                commandInfo.ReplyToCommand($"{MessagePrefix}Spawn with Id={id} not found.");
+                return;
+            }
 
-        if (closestSpawn == null)
+            spawnToRemove = spawnById;
+        }
+        else
         {
-            commandInfo.ReplyToCommand($"{MessagePrefix}No spawns found within 128 units.");
-            return;
+            var spawns = _spawnManager.GetSpawns((Bombsite)_showingSpawnsForBombsite);
+
+            if (spawns.Count == 0)
+            {
+                commandInfo.ReplyToCommand($"{MessagePrefix}No spawns found.");
+                return;
+            }
+
+            var closestDistance = 9999.9;
+
+            foreach (var spawn in spawns)
+            {
+                var distance = Helpers.GetDistanceBetweenVectors(spawn.Vector, player!.PlayerPawn.Value!.AbsOrigin!);
+
+                if (distance > 128.0 || distance > closestDistance)
+                {
+                    continue;
+                }
+
+                closestDistance = distance;
+                spawnToRemove = spawn;
+            }
+
+            if (spawnToRemove == null)
+            {
+                commandInfo.ReplyToCommand($"{MessagePrefix}No spawns found within 128 units.");
+                return;
+            }
         }
 
         // Remove the beam entity that is showing for the closest spawn.
@@ -531,19 +554,19 @@ public class RetakesPlugin : BasePlugin
             }
 
             if (
-                beamEntity.AbsOrigin.Z - closestSpawn.Vector.Z == 0 &&
-                beamEntity.AbsOrigin.X - closestSpawn.Vector.X == 0 &&
-                beamEntity.AbsOrigin.Y - closestSpawn.Vector.Y == 0
+                beamEntity.AbsOrigin.Z - spawnToRemove.Vector.Z == 0 &&
+                beamEntity.AbsOrigin.X - spawnToRemove.Vector.X == 0 &&
+                beamEntity.AbsOrigin.Y - spawnToRemove.Vector.Y == 0
             )
             {
                 beamEntity.Remove();
             }
         }
 
-        var siteTag = closestSpawn.Bombsite == Bombsite.A ? "A" : "B";
+        var siteTag = spawnToRemove.Bombsite == Bombsite.A ? "A" : "B";
         var labelSuffix = $"[{siteTag}]";
-        var labelPrefixWithSpace = $"{closestSpawn.Id} ";
-        var labelPrefixNoSpace = $"{closestSpawn.Id}[";
+        var labelPrefixWithSpace = $"{spawnToRemove.Id} ";
+        var labelPrefixNoSpace = $"{spawnToRemove.Id}[";
 
         var textEntities = Utilities.FindAllEntitiesByDesignerName<CPointWorldText>("point_worldtext");
         foreach (var text in textEntities)
@@ -565,7 +588,7 @@ public class RetakesPlugin : BasePlugin
             }
         }
 
-        var didRemoveSpawn = _mapConfig.RemoveSpawn(closestSpawn);
+        var didRemoveSpawn = _mapConfig.RemoveSpawnById(spawnToRemove.Id);
         if (didRemoveSpawn)
         {
             _spawnManager.CalculateMapSpawns();
