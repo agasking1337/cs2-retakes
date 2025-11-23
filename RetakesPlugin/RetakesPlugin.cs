@@ -68,6 +68,8 @@ public class RetakesPlugin : BasePlugin
 
     // TODO: We should really store this in SQLite, but for now we'll just store it in memory.
     private readonly HashSet<CCSPlayerController> _hasMutedVoices = [];
+    private readonly Dictionary<CCSPlayerController, (string Html, float RemainingSeconds)> _bombsiteOverlays = [];
+    private bool _bombsiteOverlayLoopRunning;
 
     private void ResetState()
     {
@@ -368,7 +370,58 @@ public class RetakesPlugin : BasePlugin
         });
     }
 
-    
+    private void StartBombsiteOverlayLoop()
+    {
+        if (_bombsiteOverlayLoopRunning)
+        {
+            return;
+        }
+
+        _bombsiteOverlayLoopRunning = true;
+        AddTimer(0.1f, BombsiteOverlayTick);
+    }
+
+    private void BombsiteOverlayTick()
+    {
+        if (_bombsiteOverlays.Count == 0)
+        {
+            _bombsiteOverlayLoopRunning = false;
+            return;
+        }
+
+        var entries = _bombsiteOverlays.ToList();
+        foreach (var entry in entries)
+        {
+            var player = entry.Key;
+            var (html, remaining) = entry.Value;
+
+            if (!Helpers.IsValidPlayer(player) || player.Team != CsTeam.CounterTerrorist)
+            {
+                _bombsiteOverlays.Remove(player);
+                continue;
+            }
+
+            player.PrintToCenterHtml(html);
+            remaining -= 0.1f;
+
+            if (remaining <= 0f)
+            {
+                _bombsiteOverlays.Remove(player);
+            }
+            else
+            {
+                _bombsiteOverlays[player] = (html, remaining);
+            }
+        }
+
+        if (_bombsiteOverlays.Count == 0)
+        {
+            _bombsiteOverlayLoopRunning = false;
+            return;
+        }
+
+        AddTimer(0.1f, BombsiteOverlayTick);
+    }
 
     [ConsoleCommand("css_add", "Creates a new retakes spawn for the bombsite currently shown.")]
     [ConsoleCommand("css_addspawn", "Creates a new retakes spawn for the bombsite currently shown.")]
@@ -1474,7 +1527,13 @@ public class RetakesPlugin : BasePlugin
 
             if (player.Team == CsTeam.CounterTerrorist)
             {
-                player.PrintToCenter(centerAnnouncementMessage);
+                var sitePreviewUrl = bombsite == Bombsite.A
+                    ? "https://raw.githubusercontent.com/agasking1337/cs2-retakes/refs/heads/master/3rd_party/SiteA.png"
+                    : "https://raw.githubusercontent.com/agasking1337/cs2-retakes/refs/heads/master/3rd_party/SiteB.png";
+
+                var html = $"<img src='{sitePreviewUrl}' /><br/>{centerAnnouncementMessage}";
+                _bombsiteOverlays[player] = (html, 3.0f);
+                StartBombsiteOverlayLoop();
             }
         }
     }

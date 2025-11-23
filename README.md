@@ -29,6 +29,16 @@ If you appreciate the project then please take the time to star the repository ð
 - [x] Implement better spawn management system
 - [x] Add a release zip file without spawns too
 
+## Bombsite previews
+
+Site A:
+
+![Site A](https://raw.githubusercontent.com/agasking1337/cs2-retakes/refs/heads/master/3rd_party/SiteA.png)
+
+Site B:
+
+![Site B](https://raw.githubusercontent.com/agasking1337/cs2-retakes/refs/heads/master/3rd_party/SiteB.png)
+
 ## Installation
 - Download the zip file from the [latest release](https://github.com/B3none/cs2-retakes/releases/latest), and extract the contents into your `addons/counterstrikesharp/plugins` directory.
 - Download the latest shared plugin and put it into your `addons/counterstrikesharp/shared` directory.
