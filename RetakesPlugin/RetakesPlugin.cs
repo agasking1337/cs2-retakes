@@ -1133,6 +1133,7 @@ public class RetakesPlugin : BasePlugin
             _retakesConfig!.RetakesConfigData!.EnableFallbackBombsiteAnnouncement)
         {
             AnnounceBombsite(_currentBombsite);
+            AnnounceBombsite(_currentBombsite, true);
         }
 
         RetakesPluginEventSenderCapability.Get()?.TriggerEvent(new AnnounceBombsiteEvent(_currentBombsite));
@@ -1297,9 +1298,6 @@ public class RetakesPlugin : BasePlugin
     public HookResult OnBombPlanted(EventBombPlanted @event, GameEventInfo info)
     {
         Helpers.Debug($"OnBombPlanted event fired");
-
-        AddTimer(4.1f, () => AnnounceBombsite(_currentBombsite, true));
-
         return HookResult.Continue;
     }
 
@@ -1528,11 +1526,12 @@ public class RetakesPlugin : BasePlugin
             if (player.Team == CsTeam.CounterTerrorist)
             {
                 var sitePreviewUrl = bombsite == Bombsite.A
-                    ? "https://raw.githubusercontent.com/agasking1337/cs2-retakes/refs/heads/master/3rd_party/SiteA.png"
-                    : "https://raw.githubusercontent.com/agasking1337/cs2-retakes/refs/heads/master/3rd_party/SiteB.png";
+                    ? "https://raw.githubusercontent.com/agasking1337/cs2-retakes/refs/heads/master/3rd_party/A%20Site.png"
+                    : "https://raw.githubusercontent.com/agasking1337/cs2-retakes/refs/heads/master/3rd_party/B%20Site.png";
 
-                var html = $"<img src='{sitePreviewUrl}' /><br/>{centerAnnouncementMessage}";
-                _bombsiteOverlays[player] = (html, 3.0f);
+                var centerTextHtml = centerAnnouncementMessage.Replace("\n", "<br/>");
+                var html = $"<img src='{sitePreviewUrl}' /><br/><br/><font color='#ff4040'>{centerTextHtml}</font>";
+                _bombsiteOverlays[player] = (html, 2.0f);
                 StartBombsiteOverlayLoop();
             }
         }
